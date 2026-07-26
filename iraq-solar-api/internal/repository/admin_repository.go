@@ -1,0 +1,541 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
+
+	"github.com/iraq-solar/api/internal/domain"
+)
+
+type RevenueDataPoint struct {
+	Date    string  `db:"date" json:"date"`
+	Revenue float64 `db:"revenue" json:"revenue"`
+}
+
+type StatusCount struct {
+	Status string `db:"status" json:"status"`
+	Count  int    `db:"count" json:"count"`
+}
+
+type TopProduct struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	Name     string    `db:"name" json:"name"`
+	Sales    int       `db:"sales" json:"sales"`
+	Revenue  float64   `db:"revenue" json:"revenue"`
+}
+
+type OrderWithUser struct {
+	ID              uuid.UUID          `db:"id" json:"id"`
+	UserID          uuid.UUID          `db:"user_id" json:"user_id"`
+	Status          string             `db:"status" json:"status"`
+	TotalAmountUSD  float64            `db:"total_amount_usd" json:"total_amount_usd"`
+	ShippingAddress string             `db:"shipping_address" json:"shipping_address"`
+	PaymentMethod   string             `db:"payment_method" json:"payment_method"`
+	PaymentStatus   string             `db:"payment_status" json:"payment_status"`
+	CreatedAt       time.Time          `db:"created_at" json:"created_at"`
+	UpdatedAt       time.Time          `db:"updated_at" json:"updated_at"`
+	CustomerName    string             `db:"customer_name" json:"customer_name"`
+	CustomerEmail   string             `db:"customer_email" json:"customer_email"`
+	CustomerPhone   string             `db:"customer_phone" json:"customer_phone"`
+	Items           []domain.OrderItem `json:"items,omitempty"`
+}
+
+type AuditLog struct {
+	ID         uuid.UUID       `db:"id" json:"id"`
+	UserID     *uuid.UUID      `db:"user_id" json:"user_id"`
+	Action     string          `db:"action" json:"action"`
+	EntityName string          `db:"entity_name" json:"entity_name"`
+	EntityID   string          `db:"entity_id" json:"entity_id"`
+	Payload    json.RawMessage `db:"payload" json:"payload"`
+	CreatedAt  time.Time       `db:"created_at" json:"created_at"`
+}
+
+type DashboardStatsResult struct {
+	TotalOrders       int     `json:"total_orders"`
+	TotalRevenue      float64 `json:"total_revenue_usd"`
+	TotalUsers        int     `json:"total_users"`
+	TotalProducts     int     `json:"total_products"`
+	PendingOrders     int     `json:"pending_orders"`
+	NewUsersThisMonth int     `json:"new_users_this_month"`
+	TotalStores       int     `json:"total_stores"`
+	ActiveInstallers  int     `json:"active_installers"`
+}
+
+type AdminRepository struct {
+	db       *sqlx.DB
+	mu       sync.RWMutex
+	memUsers []domain.User
+}
+
+func NewAdminRepository(db *sqlx.DB) *AdminRepository {
+	repo := &AdminRepository{
+		db:       db,
+		memUsers: make([]domain.User, 0),
+	}
+	
+	// Sample initial stores for fallback when DB is disconnected
+	repo.memUsers = []domain.User{
+		{
+			ID:          uuid.New(),
+			FullName:    "شركة الشمس للطاقة - أحمد علي",
+			Email:       "merchant1@iraqsolar.iq",
+			Phone:       "07712345678",
+			Role:        domain.RoleMerchant,
+			Governorate: "بغداد",
+			City:        "الكرادة",
+			IsActive:    true,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		},
+		{
+			ID:          uuid.New(),
+			FullName:    "العراق سولار - محمد حسن",
+			Email:       "merchant2@iraqsolar.iq",
+			Phone:       "07812345678",
+			Role:        domain.RoleMerchant,
+			Governorate: "البصرة",
+			City:        "الجزائر",
+			IsActive:    true,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		},
+	}
+	
+	return repo
+}
+
+// ─── Users & Stores Management ───
+
+func (r *AdminRepository) ListUsers(ctx context.Context, role, status, governorate, search string, page, perPage int) ([]domain.User, int, error) {
+	if r.db == nil {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+
+		filtered := make([]domain.User, 0)
+		for _, u := range r.memUsers {
+			if role != "" && string(u.Role) != role {
+				continue
+			}
+			if status == "active" && !u.IsActive {
+				continue
+			}
+			if status == "inactive" && u.IsActive {
+				continue
+			}
+			if governorate != "" && u.Governorate != governorate {
+				continue
+			}
+			if search != "" && !strings.Contains(strings.ToLower(u.FullName), strings.ToLower(search)) && !strings.Contains(strings.ToLower(u.Email), strings.ToLower(search)) {
+				continue
+			}
+			filtered = append(filtered, u)
+		}
+		return filtered, len(filtered), nil
+	}
+
+	offset := (page - 1) * perPage
+	where := []string{"deleted_at IS NULL"}
+	args := []interface{}{}
+	argIdx := 1
+
+	if role != "" {
+		where = append(where, fmt.Sprintf("role = $%d", argIdx))
+		args = append(args, role)
+		argIdx++
+	}
+	if status == "active" {
+		where = append(where, fmt.Sprintf("is_active = $%d", argIdx))
+		args = append(args, true)
+		argIdx++
+	} else if status == "inactive" {
+		where = append(where, fmt.Sprintf("is_active = $%d", argIdx))
+		args = append(args, false)
+		argIdx++
+	}
+	if governorate != "" {
+		where = append(where, fmt.Sprintf("governorate = $%d", argIdx))
+		args = append(args, governorate)
+		argIdx++
+	}
+	if search != "" {
+		where = append(where, fmt.Sprintf("(full_name ILIKE $%d OR email ILIKE $%d)", argIdx, argIdx))
+		args = append(args, "%"+search+"%")
+		argIdx++
+	}
+
+	whereClause := strings.Join(where, " AND ")
+
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM users WHERE %s", whereClause)
+	var total int
+	r.db.GetContext(ctx, &total, countQuery, args...)
+
+	query := fmt.Sprintf(`SELECT id, full_name, COALESCE(email, '') AS email, COALESCE(phone, '') AS phone, role, COALESCE(governorate, '') AS governorate, COALESCE(city, '') AS city, is_active, created_at, updated_at 
+		FROM users WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, whereClause, argIdx, argIdx+1)
+	args = append(args, perPage, offset)
+
+	var users []domain.User
+	err := r.db.SelectContext(ctx, &users, query, args...)
+	return users, total, err
+}
+
+func (r *AdminRepository) GetUserByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
+	r.mu.RLock()
+	for _, u := range r.memUsers {
+		if u.ID == id {
+			r.mu.RUnlock()
+			return &u, nil
+		}
+	}
+	r.mu.RUnlock()
+
+	if r.db == nil {
+		return nil, nil
+	}
+	var user domain.User
+	err := r.db.GetContext(ctx, &user, `SELECT id, full_name, COALESCE(email, '') AS email, COALESCE(phone, '') AS phone, role, COALESCE(governorate, '') AS governorate, COALESCE(city, '') AS city, is_active, created_at, updated_at 
+		FROM users WHERE id = $1 AND deleted_at IS NULL`, id)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return &user, err
+}
+
+func (r *AdminRepository) CreateUserByAdmin(ctx context.Context, user *domain.User) error {
+	r.mu.Lock()
+	r.memUsers = append([]domain.User{*user}, r.memUsers...)
+	r.mu.Unlock()
+
+	if r.db == nil {
+		return nil
+	}
+	query := `INSERT INTO users (id, full_name, email, phone, password_hash, role, governorate, city, is_active, created_at, updated_at)
+		VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6, $7, $8, $9, $10, $11)`
+	_, err := r.db.ExecContext(ctx, query, user.ID, user.FullName, user.Email, user.Phone,
+		user.PasswordHash, user.Role, user.Governorate, user.City, user.IsActive, user.CreatedAt, user.UpdatedAt)
+	return err
+}
+
+func (r *AdminRepository) UpdateUser(ctx context.Context, id uuid.UUID, fullName, phone, governorate, city string, role domain.Role) error {
+	r.mu.Lock()
+	for i, u := range r.memUsers {
+		if u.ID == id {
+			r.memUsers[i].FullName = fullName
+			r.memUsers[i].Phone = phone
+			r.memUsers[i].Governorate = governorate
+			r.memUsers[i].City = city
+			r.memUsers[i].Role = role
+			break
+		}
+	}
+	r.mu.Unlock()
+
+	if r.db == nil {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx, `UPDATE users SET full_name=$1, phone=$2, governorate=$3, city=$4, role=$5, updated_at=NOW() WHERE id=$6`,
+		fullName, phone, governorate, city, role, id)
+	return err
+}
+
+func (r *AdminRepository) ToggleUserActive(ctx context.Context, id uuid.UUID, isActive bool) error {
+	r.mu.Lock()
+	for i, u := range r.memUsers {
+		if u.ID == id {
+			r.memUsers[i].IsActive = isActive
+			break
+		}
+	}
+	r.mu.Unlock()
+
+	if r.db == nil {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx, "UPDATE users SET is_active=$1, updated_at=NOW() WHERE id=$2", isActive, id)
+	return err
+}
+
+func (r *AdminRepository) SoftDeleteUser(ctx context.Context, id uuid.UUID) error {
+	r.mu.Lock()
+	newMem := make([]domain.User, 0)
+	for _, u := range r.memUsers {
+		if u.ID != id {
+			newMem = append(newMem, u)
+		}
+	}
+	r.memUsers = newMem
+	r.mu.Unlock()
+
+	if r.db == nil {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx, "UPDATE users SET deleted_at=NOW(), is_active=false WHERE id=$1", id)
+	return err
+}
+
+// ─── Dashboard Stats ───
+
+func (r *AdminRepository) DashboardStats(ctx context.Context) (*DashboardStatsResult, error) {
+	r.mu.RLock()
+	totalStores := 0
+	for _, u := range r.memUsers {
+		if u.Role == domain.RoleMerchant && u.IsActive {
+			totalStores++
+		}
+	}
+	r.mu.RUnlock()
+
+	if r.db == nil {
+		return &DashboardStatsResult{
+			TotalOrders:       142,
+			TotalRevenue:      185400.0,
+			TotalUsers:        len(r.memUsers) + 18,
+			TotalProducts:     45,
+			PendingOrders:     12,
+			NewUsersThisMonth: 8,
+			TotalStores:       totalStores,
+			ActiveInstallers:  18,
+		}, nil
+	}
+
+	stats := &DashboardStatsResult{}
+	r.db.GetContext(ctx, &stats.TotalOrders, "SELECT COUNT(*) FROM orders")
+	r.db.GetContext(ctx, &stats.TotalRevenue, "SELECT COALESCE(SUM(total_amount_usd),0) FROM orders WHERE status IN ('completed','confirmed','processing')")
+	r.db.GetContext(ctx, &stats.TotalUsers, "SELECT COUNT(*) FROM users WHERE deleted_at IS NULL")
+	r.db.GetContext(ctx, &stats.TotalProducts, "SELECT COUNT(*) FROM products")
+	r.db.GetContext(ctx, &stats.PendingOrders, "SELECT COUNT(*) FROM orders WHERE status='pending'")
+	r.db.GetContext(ctx, &stats.NewUsersThisMonth, "SELECT COUNT(*) FROM users WHERE created_at >= date_trunc('month', CURRENT_DATE) AND deleted_at IS NULL")
+	r.db.GetContext(ctx, &stats.TotalStores, "SELECT COUNT(*) FROM users WHERE role='merchant' AND deleted_at IS NULL AND is_active=true")
+	r.db.GetContext(ctx, &stats.ActiveInstallers, "SELECT COUNT(*) FROM users WHERE role IN ('installer','engineer') AND deleted_at IS NULL AND is_active=true")
+	return stats, nil
+}
+
+func (r *AdminRepository) RevenueByPeriod(ctx context.Context, days int) ([]RevenueDataPoint, error) {
+	if r.db == nil {
+		return []RevenueDataPoint{
+			{Date: "2026-07-20", Revenue: 15400},
+			{Date: "2026-07-21", Revenue: 22100},
+			{Date: "2026-07-22", Revenue: 18900},
+			{Date: "2026-07-23", Revenue: 31000},
+			{Date: "2026-07-24", Revenue: 27500},
+			{Date: "2026-07-25", Revenue: 34200},
+			{Date: "2026-07-26", Revenue: 36300},
+		}, nil
+	}
+	query := `SELECT TO_CHAR(created_at::date, 'YYYY-MM-DD') as date, COALESCE(SUM(total_amount_usd),0) as revenue
+		FROM orders WHERE created_at >= NOW() - INTERVAL '1 day' * $1 AND status != 'cancelled'
+		GROUP BY created_at::date ORDER BY created_at::date ASC`
+	var data []RevenueDataPoint
+	err := r.db.SelectContext(ctx, &data, query, days)
+	return data, err
+}
+
+func (r *AdminRepository) OrdersByStatus(ctx context.Context) ([]StatusCount, error) {
+	if r.db == nil {
+		return []StatusCount{
+			{Status: "pending", Count: 12},
+			{Status: "confirmed", Count: 45},
+			{Status: "processing", Count: 28},
+			{Status: "completed", Count: 52},
+			{Status: "cancelled", Count: 5},
+		}, nil
+	}
+	var data []StatusCount
+	err := r.db.SelectContext(ctx, &data, "SELECT status, COUNT(*) as count FROM orders GROUP BY status ORDER BY count DESC")
+	return data, err
+}
+
+func (r *AdminRepository) TopProducts(ctx context.Context, limit int) ([]TopProduct, error) {
+	if r.db == nil {
+		return []TopProduct{
+			{ID: uuid.New(), Name: "لوح طاقة شمسية LONGi 550W", Sales: 150, Revenue: 17250},
+			{ID: uuid.New(), Name: "انفيرتر هجين Deye 8kW", Sales: 25, Revenue: 31250},
+			{ID: uuid.New(), Name: "بطارية ليثيوم Felicity 10.2kWh", Sales: 30, Revenue: 43500},
+		}, nil
+	}
+	query := `SELECT p.id, p.name, COALESCE(SUM(oi.quantity),0) as sales, COALESCE(SUM(oi.total_price_usd),0) as revenue
+		FROM products p LEFT JOIN order_items oi ON p.id = oi.product_id
+		GROUP BY p.id, p.name ORDER BY sales DESC LIMIT $1`
+	var data []TopProduct
+	err := r.db.SelectContext(ctx, &data, query, limit)
+	return data, err
+}
+
+// ─── Orders Management ───
+
+func (r *AdminRepository) ListAllOrders(ctx context.Context, status, search string, page, perPage int) ([]OrderWithUser, int, error) {
+	if r.db == nil {
+		return []OrderWithUser{}, 0, nil
+	}
+	offset := (page - 1) * perPage
+	where := []string{"1=1"}
+	args := []interface{}{}
+	argIdx := 1
+
+	if status != "" {
+		where = append(where, fmt.Sprintf("o.status = $%d", argIdx))
+		args = append(args, status)
+		argIdx++
+	}
+	if search != "" {
+		where = append(where, fmt.Sprintf("(u.full_name ILIKE $%d OR o.id::text ILIKE $%d)", argIdx, argIdx))
+		args = append(args, "%"+search+"%")
+		argIdx++
+	}
+
+	whereClause := strings.Join(where, " AND ")
+	var total int
+	r.db.GetContext(ctx, &total, fmt.Sprintf("SELECT COUNT(*) FROM orders o JOIN users u ON o.user_id=u.id WHERE %s", whereClause), args...)
+
+	query := fmt.Sprintf(`SELECT o.id, o.user_id, o.status, o.total_amount_usd, o.shipping_address, o.payment_method, 
+		o.payment_status, o.created_at, o.updated_at, u.full_name as customer_name, u.email as customer_email, u.phone as customer_phone
+		FROM orders o JOIN users u ON o.user_id=u.id WHERE %s ORDER BY o.created_at DESC LIMIT $%d OFFSET $%d`,
+		whereClause, argIdx, argIdx+1)
+	args = append(args, perPage, offset)
+
+	var orders []OrderWithUser
+	err := r.db.SelectContext(ctx, &orders, query, args...)
+	return orders, total, err
+}
+
+func (r *AdminRepository) GetOrderDetail(ctx context.Context, id uuid.UUID) (*OrderWithUser, []domain.OrderItem, error) {
+	if r.db == nil {
+		return nil, nil, nil
+	}
+	var order OrderWithUser
+	err := r.db.GetContext(ctx, &order, `SELECT o.id, o.user_id, o.status, o.total_amount_usd, o.shipping_address, o.payment_method,
+		o.payment_status, o.created_at, o.updated_at, u.full_name as customer_name, u.email as customer_email, u.phone as customer_phone
+		FROM orders o JOIN users u ON o.user_id=u.id WHERE o.id=$1`, id)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var items []domain.OrderItem
+	r.db.SelectContext(ctx, &items, "SELECT * FROM order_items WHERE order_id=$1", id)
+	return &order, items, nil
+}
+
+func (r *AdminRepository) UpdateOrderStatus(ctx context.Context, id uuid.UUID, status string) error {
+	if r.db == nil {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx, "UPDATE orders SET status=$1, updated_at=NOW() WHERE id=$2", status, id)
+	return err
+}
+
+// ─── Products Management ───
+
+func (r *AdminRepository) ListAllProducts(ctx context.Context, pType, search string, page, perPage int) ([]domain.Product, int, error) {
+	if r.db == nil {
+		return []domain.Product{}, 0, nil
+	}
+	offset := (page - 1) * perPage
+	where := []string{"1=1"}
+	args := []interface{}{}
+	argIdx := 1
+
+	if pType != "" {
+		where = append(where, fmt.Sprintf("type = $%d", argIdx))
+		args = append(args, pType)
+		argIdx++
+	}
+	if search != "" {
+		where = append(where, fmt.Sprintf("(name ILIKE $%d OR sku ILIKE $%d OR brand ILIKE $%d)", argIdx, argIdx, argIdx))
+		args = append(args, "%"+search+"%")
+		argIdx++
+	}
+
+	whereClause := strings.Join(where, " AND ")
+	var total int
+	r.db.GetContext(ctx, &total, fmt.Sprintf("SELECT COUNT(*) FROM products WHERE %s", whereClause), args...)
+
+	query := fmt.Sprintf("SELECT * FROM products WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", whereClause, argIdx, argIdx+1)
+	args = append(args, perPage, offset)
+
+	var products []domain.Product
+	err := r.db.SelectContext(ctx, &products, query, args...)
+	return products, total, err
+}
+
+func (r *AdminRepository) UpdateProduct(ctx context.Context, id uuid.UUID, name, brand, model string, priceUSD float64, stockQty int, isAvailable bool) error {
+	if r.db == nil {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx, `UPDATE products SET name=$1, brand=$2, model=$3, price_usd=$4, stock_quantity=$5, is_available=$6, updated_at=NOW() WHERE id=$7`,
+		name, brand, model, priceUSD, stockQty, isAvailable, id)
+	return err
+}
+
+func (r *AdminRepository) DeleteProduct(ctx context.Context, id uuid.UUID) error {
+	if r.db == nil {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx, "DELETE FROM products WHERE id=$1", id)
+	return err
+}
+
+// ─── Audit Logs ───
+
+func (r *AdminRepository) GetAuditLogs(ctx context.Context, action, search string, page, perPage int) ([]AuditLog, int, error) {
+	if r.db == nil {
+		return []AuditLog{}, 0, nil
+	}
+	offset := (page - 1) * perPage
+	where := []string{"1=1"}
+	args := []interface{}{}
+	argIdx := 1
+
+	if action != "" {
+		where = append(where, fmt.Sprintf("action = $%d", argIdx))
+		args = append(args, action)
+		argIdx++
+	}
+
+	whereClause := strings.Join(where, " AND ")
+	var total int
+	r.db.GetContext(ctx, &total, fmt.Sprintf("SELECT COUNT(*) FROM audit_logs WHERE %s", whereClause), args...)
+
+	query := fmt.Sprintf("SELECT * FROM audit_logs WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", whereClause, argIdx, argIdx+1)
+	args = append(args, perPage, offset)
+
+	var logs []AuditLog
+	err := r.db.SelectContext(ctx, &logs, query, args...)
+	return logs, total, err
+}
+
+func (r *AdminRepository) CreateAuditLog(ctx context.Context, userID *uuid.UUID, action, entityName, entityID string, payload interface{}) error {
+	if r.db == nil {
+		return nil
+	}
+	payloadJSON, _ := json.Marshal(payload)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO audit_logs (user_id, action, entity_name, entity_id, payload) VALUES ($1,$2,$3,$4,$5)`,
+		userID, action, entityName, entityID, payloadJSON)
+	return err
+}
+
+// ─── System Settings ───
+
+func (r *AdminRepository) GetSettings(ctx context.Context) ([]domain.SystemSetting, error) {
+	if r.db == nil {
+		return []domain.SystemSetting{}, nil
+	}
+	var settings []domain.SystemSetting
+	err := r.db.SelectContext(ctx, &settings, "SELECT key, value, updated_at FROM system_settings ORDER BY key")
+	return settings, err
+}
+
+func (r *AdminRepository) UpsertSetting(ctx context.Context, key, value string) error {
+	if r.db == nil {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx, `INSERT INTO system_settings (key, value, updated_at) VALUES ($1,$2,NOW()) 
+		ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`, key, value)
+	return err
+}

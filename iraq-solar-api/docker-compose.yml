@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - DATABASE_URL=postgres://postgres:postgres_secure_pass_2026@postgres:5432/iraq_solar_db?sslmode=disable
+      - JWT_SECRET=production-iraq-solar-super-secret-key-2026
+      - ENVIRONMENT=production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: always
+
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: iraq_solar_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_secure_pass_2026
+      POSTGRES_DB: iraq_solar_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql
+      - ./migrations/002_admin_extensions.sql:/docker-entrypoint-initdb.d/002_admin_extensions.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: iraq_solar_redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+  minio:
+    image: minio/minio:latest
+    container_name: iraq_solar_minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: iraqsolar
+      MINIO_ROOT_PASSWORD: iraqsolar_minio_2026
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    restart: always
+
+volumes:
+  postgres_data:
+  minio_data:
