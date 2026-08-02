@@ -11,6 +11,8 @@ import { ProductsPage } from './pages/ProductsPage';
 import { StoresPage } from './pages/StoresPage';
 import { UsersPage } from './pages/UsersPage';
 import { BannersPage } from './pages/BannersPage';
+import { CategoriesPage } from './pages/CategoriesPage';
+import { BrandsPage } from './pages/BrandsPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
 import { SettingsPage } from './pages/SettingsPage';
 
@@ -79,6 +81,22 @@ export function App() {
               element={
                 <ProtectedRoute>
                   <UsersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/categories"
+              element={
+                <ProtectedRoute>
+                  <CategoriesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/brands"
+              element={
+                <ProtectedRoute>
+                  <BrandsPage />
                 </ProtectedRoute>
               }
             />

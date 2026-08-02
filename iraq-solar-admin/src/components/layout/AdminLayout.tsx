@@ -4,6 +4,8 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Package,
+  Layers,
+  Star,
   Store,
   Users,
   Image as ImageIcon,
@@ -66,6 +68,18 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       path: '/products',
       icon: Package,
       perm: 'products.own' as const,
+    },
+    {
+      label: 'تصنيفات المنتجات',
+      path: '/categories',
+      icon: Layers,
+      perm: 'products.manage' as const,
+    },
+    {
+      label: 'الماركات (Brands)',
+      path: '/brands',
+      icon: Star,
+      perm: 'products.manage' as const,
     },
     {
       label: 'المتاجر والتوثيق',

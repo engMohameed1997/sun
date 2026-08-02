@@ -42,7 +42,9 @@ func main() {
 
 	// 3. Initialize Repositories
 	userRepo := repository.NewUserRepository(dbPool)
+	storeRepo := repository.NewStoreRepository(dbPool)
 	productRepo := repository.NewProductRepository(dbPool)
+	categoryRepo := repository.NewCategoryRepository(dbPool)
 	calcRepo := repository.NewSolarCalculationRepository(dbPool)
 	orderRepo := repository.NewOrderRepository(dbPool)
 	adminRepo := repository.NewAdminRepository(dbPool)
@@ -51,6 +53,7 @@ func main() {
 	notificationRepo := repository.NewNotificationRepository(dbPool)
 
 	// 4. Initialize Services
+	storeService := service.NewStoreService(storeRepo, userRepo)
 	authService := service.NewAuthService(cfg.JWTSecret, userRepo)
 	calcService := service.NewSolarCalculatorService(calcRepo)
 	orderService := service.NewOrderService(orderRepo, productRepo)
@@ -66,9 +69,10 @@ func main() {
 	}
 
 	// 5. Initialize Handlers
+	storeHandler := handler.NewStoreHandler(storeService)
 	authHandler := handler.NewAuthHandler(authService)
 	calcHandler := handler.NewCalculatorHandler(calcService)
-	productHandler := handler.NewProductHandler(productRepo)
+	productHandler := handler.NewProductHandler(productRepo, storeRepo, categoryRepo)
 	orderHandler := handler.NewOrderHandler(orderService)
 	adminHandler := handler.NewAdminHandler(adminService)
 	uploadHandler := handler.NewUploadHandler(minioService)
@@ -140,7 +144,9 @@ func main() {
 		v1.GET("/categories", productHandler.ListCategories)
 		v1.GET("/governorates", adminHandler.ListGovernorates)
 		v1.GET("/banners", adminHandler.ListHomeBanners)
-		v1.GET("/stores", adminHandler.ListStores)
+		// Stores (Public)
+		v1.GET("/stores", storeHandler.ListStores)
+		v1.GET("/stores/:id", storeHandler.GetStore)
 
 		// Public Installers/Engineers Directory
 		v1.GET("/installers", installerHandler.ListInstallers)
@@ -235,10 +241,20 @@ func main() {
 				adminOnly.POST("/users", adminHandler.CreateUser)
 				adminOnly.PUT("/users/:id", adminHandler.UpdateUser)
 				adminOnly.PUT("/users/:id/status", adminHandler.ToggleUserActive)
-				// Stores
-				adminOnly.GET("/stores", adminHandler.ListStores)
-				adminOnly.POST("/stores", adminHandler.CreateStore)
-				adminOnly.PUT("/stores/:id/verify", adminHandler.VerifyStore)
+				// Stores (Admin Full Control)
+				adminOnly.GET("/stores", storeHandler.ListStores)
+				adminOnly.POST("/stores", storeHandler.CreateStore)
+				adminOnly.GET("/stores/:id", storeHandler.GetStore)
+				adminOnly.PUT("/stores/:id", storeHandler.UpdateStore)
+				adminOnly.DELETE("/stores/:id", storeHandler.DeleteStore)
+				adminOnly.PUT("/stores/:id/verify", storeHandler.VerifyStore)
+				
+				// Branches
+				adminOnly.POST("/stores/:id/branches", storeHandler.CreateBranch)
+				adminOnly.PUT("/stores/:id/branches/:branch_id", storeHandler.UpdateBranch)
+				adminOnly.DELETE("/stores/:id/branches/:branch_id", storeHandler.DeleteBranch)
+
+				// Delivery Fees (existing logic updated)
 				adminOnly.GET("/stores/:id/delivery-fees", adminHandler.GetStoreDeliveryFees)
 				adminOnly.PUT("/stores/:id/delivery-fees", adminHandler.UpdateStoreDeliveryFees)
 
@@ -247,6 +263,11 @@ func main() {
 				adminOnly.GET("/orders/:id", adminHandler.GetOrderDetail)
 				adminOnly.PUT("/orders/:id/status", adminHandler.UpdateOrderStatus)
 
+				// Categories
+				adminOnly.POST("/categories", productHandler.CreateCategory)
+				adminOnly.PUT("/categories/:id", productHandler.UpdateCategory)
+				adminOnly.DELETE("/categories/:id", productHandler.DeleteCategory)
+				
 				// Products
 				adminOnly.GET("/products", adminHandler.ListProducts)
 				adminOnly.GET("/products/low-stock", adminHandler.LowStockProducts)

@@ -551,34 +551,34 @@ func (r *AdminRepository) VerifyStore(ctx context.Context, storeID uuid.UUID, ad
 	return err
 }
 
-func (r *AdminRepository) GetStoreDeliveryFees(ctx context.Context, merchantID uuid.UUID) ([]domain.DeliveryFee, error) {
+func (r *AdminRepository) GetStoreDeliveryFees(ctx context.Context, storeID uuid.UUID) ([]domain.DeliveryFee, error) {
 	if r.db == nil {
 		return []domain.DeliveryFee{}, nil
 	}
 	var fees []domain.DeliveryFee
 	query := `
-		SELECT df.id, df.merchant_id, df.governorate_id, df.fee_iqd, df.estimated_days, df.is_active,
+		SELECT df.id, df.merchant_id, df.store_id, df.governorate_id, df.fee_iqd, df.estimated_days, df.is_active,
 		       g.name_ar AS governorate_name_ar, g.name_en AS governorate_name_en
 		FROM delivery_fees df
 		JOIN governorates g ON df.governorate_id = g.id
-		WHERE df.merchant_id = $1
+		WHERE df.store_id = $1
 		ORDER BY g.id ASC
 	`
-	err := r.db.SelectContext(ctx, &fees, query, merchantID)
+	err := r.db.SelectContext(ctx, &fees, query, storeID)
 	return fees, err
 }
 
-func (r *AdminRepository) UpsertStoreDeliveryFee(ctx context.Context, merchantID uuid.UUID, govID int, feeIQD float64, days int, isActive bool) error {
+func (r *AdminRepository) UpsertStoreDeliveryFee(ctx context.Context, merchantID uuid.UUID, storeID uuid.UUID, govID int, feeIQD float64, days int, isActive bool) error {
 	if r.db == nil {
 		return nil
 	}
 	query := `
-		INSERT INTO delivery_fees (merchant_id, governorate_id, fee_iqd, estimated_days, is_active)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (merchant_id, governorate_id)
+		INSERT INTO delivery_fees (merchant_id, store_id, governorate_id, fee_iqd, estimated_days, is_active)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (store_id, governorate_id)
 		DO UPDATE SET fee_iqd = EXCLUDED.fee_iqd, estimated_days = EXCLUDED.estimated_days, is_active = EXCLUDED.is_active
 	`
-	_, err := r.db.ExecContext(ctx, query, merchantID, govID, feeIQD, days, isActive)
+	_, err := r.db.ExecContext(ctx, query, merchantID, storeID, govID, feeIQD, days, isActive)
 	return err
 }
 

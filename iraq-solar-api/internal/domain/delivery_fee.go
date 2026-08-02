@@ -3,9 +3,10 @@ package domain
 import "github.com/google/uuid"
 
 type DeliveryFee struct {
-	ID                int       `db:"id" json:"id"`
-	MerchantID        uuid.UUID `db:"merchant_id" json:"merchant_id"`
-	GovernorateID     int       `db:"governorate_id" json:"governorate_id"`
+	ID                int        `db:"id" json:"id"`
+	MerchantID        uuid.UUID  `db:"merchant_id" json:"merchant_id"`
+	StoreID           *uuid.UUID `db:"store_id" json:"store_id,omitempty"`
+	GovernorateID     int        `db:"governorate_id" json:"governorate_id"`
 	FeeIQD            float64   `db:"fee_iqd" json:"fee_iqd"`
 	EstimatedDays     int       `db:"estimated_days" json:"estimated_days"`
 	IsActive          bool      `db:"is_active" json:"is_active"`

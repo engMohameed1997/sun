@@ -282,12 +282,12 @@ func (s *AdminService) VerifyStore(ctx context.Context, adminID, storeID uuid.UU
 	return err
 }
 
-func (s *AdminService) GetStoreDeliveryFees(ctx context.Context, merchantID uuid.UUID) ([]domain.DeliveryFee, error) {
-	return s.adminRepo.GetStoreDeliveryFees(ctx, merchantID)
+func (s *AdminService) GetStoreDeliveryFees(ctx context.Context, storeID uuid.UUID) ([]domain.DeliveryFee, error) {
+	return s.adminRepo.GetStoreDeliveryFees(ctx, storeID)
 }
 
-func (s *AdminService) UpsertStoreDeliveryFee(ctx context.Context, adminID, merchantID uuid.UUID, govID int, feeIQD float64, days int, isActive bool) error {
-	err := s.adminRepo.UpsertStoreDeliveryFee(ctx, merchantID, govID, feeIQD, days, isActive)
+func (s *AdminService) UpsertStoreDeliveryFee(ctx context.Context, adminID, merchantID, storeID uuid.UUID, govID int, feeIQD float64, days int, isActive bool) error {
+	err := s.adminRepo.UpsertStoreDeliveryFee(ctx, merchantID, storeID, govID, feeIQD, days, isActive)
 	if err == nil {
 		_ = s.adminRepo.CreateAuditLog(ctx, &adminID, "UPSERT_DELIVERY_FEE", "delivery_fee", merchantID.String(), map[string]interface{}{
 			"governorate_id": govID,

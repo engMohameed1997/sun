@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -14,11 +15,13 @@ import (
 )
 
 type ProductHandler struct {
-	productRepo repository.ProductRepository
+	productRepo  repository.ProductRepository
+	storeRepo    *repository.StoreRepository
+	categoryRepo repository.CategoryRepository
 }
 
-func NewProductHandler(productRepo repository.ProductRepository) *ProductHandler {
-	return &ProductHandler{productRepo: productRepo}
+func NewProductHandler(productRepo repository.ProductRepository, storeRepo *repository.StoreRepository, categoryRepo repository.CategoryRepository) *ProductHandler {
+	return &ProductHandler{productRepo: productRepo, storeRepo: storeRepo, categoryRepo: categoryRepo}
 }
 
 func (h *ProductHandler) ListProducts(c *gin.Context) {
@@ -47,16 +50,35 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 		specs = json.RawMessage("{}")
 	}
 
+	var storeID *uuid.UUID
+	if req.StoreID != nil {
+		storeID = req.StoreID
+	} else {
+		// Find store by merchant
+		if h.storeRepo != nil {
+			store, err := h.storeRepo.GetStoreByMerchantID(c.Request.Context(), h.getMerchantID(c))
+			if err == nil && store != nil {
+				storeID = &store.ID
+			}
+		}
+	}
+
+	merchantID := h.getMerchantID(c)
 	product := &domain.Product{
 		ID:             uuid.New(),
+		CategoryID:     req.CategoryID,
+		MerchantID:     &merchantID,
+		StoreID:        storeID,
+		BranchID:       req.BranchID,
 		SKU:            req.SKU,
 		Name:           req.Name,
-		Brand:          req.Brand,
+		BrandID:        req.BrandID,
 		Model:          req.Model,
 		Type:           req.Type,
 		PriceUSD:       req.PriceUSD,
 		StockQuantity:  req.StockQuantity,
 		Specifications: specs,
+		Images:         req.Images,
 		IsAvailable:    true,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
@@ -73,6 +95,17 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 }
 
 func (h *ProductHandler) ListCategories(c *gin.Context) {
+	if h.categoryRepo != nil {
+		categories, err := h.categoryRepo.ListAll(c.Request.Context())
+		if err != nil {
+			utils.InternalServerError(c, err)
+			return
+		}
+		utils.SuccessResponse(c, http.StatusOK, "تم جلب قائمة تصنيفات المنظومات الشمسية بنجاح", categories)
+		return
+	}
+
+	// Fallback
 	categories := []domain.Category{
 		{ID: 1, Name: "ألواح شمسية", Description: "ألواح طاقة شمسية N-Type / TOPCon High Efficiency"},
 		{ID: 2, Name: "عواكس طاقة (انفيرترات)", Description: "انفيرترات هجينة وإضافية سين ويف"},
@@ -80,8 +113,71 @@ func (h *ProductHandler) ListCategories(c *gin.Context) {
 		{ID: 4, Name: "هياكل وقواعد تثبيت", Description: "هياكل تثبيت ألمنيوم ومجلفنة"},
 		{ID: 5, Name: "كوابل ومحولات", Description: "كوابل DC شمسية ومحولات ومستلزمات الحماية"},
 	}
-
 	utils.SuccessResponse(c, http.StatusOK, "تم جلب قائمة تصنيفات المنظومات الشمسية بنجاح", categories)
+}
+
+type CategoryReq struct {
+	Name        string `json:"name" binding:"required"`
+	Description string `json:"description"`
+}
+
+func (h *ProductHandler) CreateCategory(c *gin.Context) {
+	var req CategoryReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequestError(c, "بيانات التصنيف غير صالحة", err)
+		return
+	}
+
+	cat := &domain.Category{
+		Name:        req.Name,
+		Description: req.Description,
+	}
+
+	if err := h.categoryRepo.Create(c.Request.Context(), cat); err != nil {
+		utils.InternalServerError(c, err)
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusCreated, "تم إضافة التصنيف بنجاح", cat)
+}
+
+func (h *ProductHandler) UpdateCategory(c *gin.Context) {
+	idStr := c.Param("id")
+	id, _ := strconv.Atoi(idStr)
+
+	var req CategoryReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequestError(c, "بيانات التصنيف غير صالحة", err)
+		return
+	}
+
+	cat, err := h.categoryRepo.GetByID(c.Request.Context(), id)
+	if err != nil || cat == nil {
+		utils.BadRequestError(c, "التصنيف غير موجود", err)
+		return
+	}
+
+	cat.Name = req.Name
+	cat.Description = req.Description
+
+	if err := h.categoryRepo.Update(c.Request.Context(), cat); err != nil {
+		utils.InternalServerError(c, err)
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "تم تحديث التصنيف بنجاح", cat)
+}
+
+func (h *ProductHandler) DeleteCategory(c *gin.Context) {
+	idStr := c.Param("id")
+	id, _ := strconv.Atoi(idStr)
+
+	if err := h.categoryRepo.Delete(c.Request.Context(), id); err != nil {
+		utils.InternalServerError(c, err)
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "تم حذف التصنيف بنجاح", nil)
 }
 
 func (h *ProductHandler) getMerchantID(c *gin.Context) uuid.UUID {
@@ -118,18 +214,35 @@ func (h *ProductHandler) CreateMerchantProduct(c *gin.Context) {
 		specs = json.RawMessage("{}")
 	}
 
+	var storeID *uuid.UUID
+	if req.StoreID != nil {
+		storeID = req.StoreID
+	} else {
+		// Find store by merchant
+		if h.storeRepo != nil {
+			store, err := h.storeRepo.GetStoreByMerchantID(c.Request.Context(), merchantID)
+			if err == nil && store != nil {
+				storeID = &store.ID
+			}
+		}
+	}
+
 	product := &domain.Product{
 		ID:                uuid.New(),
+		CategoryID:        req.CategoryID,
 		MerchantID:        &merchantID,
+		StoreID:           storeID,
+		BranchID:          req.BranchID,
 		SKU:               req.SKU,
 		Name:              req.Name,
-		Brand:             req.Brand,
+		BrandID:           req.BrandID,
 		Model:             req.Model,
 		Type:              req.Type,
 		PriceUSD:          req.PriceUSD,
 		StockQuantity:     req.StockQuantity,
 		LowStockThreshold: req.LowStockThreshold,
 		Specifications:    specs,
+		Images:            req.Images,
 		IsAvailable:       true,
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
@@ -159,15 +272,32 @@ func (h *ProductHandler) UpdateMerchantProduct(c *gin.Context) {
 		return
 	}
 
+	var storeID *uuid.UUID
+	if req.StoreID != nil {
+		storeID = req.StoreID
+	} else {
+		// Find store by merchant
+		if h.storeRepo != nil {
+			store, err := h.storeRepo.GetStoreByMerchantID(c.Request.Context(), merchantID)
+			if err == nil && store != nil {
+				storeID = &store.ID
+			}
+		}
+	}
+
 	product := &domain.Product{
 		ID:                id,
+		CategoryID:        req.CategoryID,
 		MerchantID:        &merchantID,
+		StoreID:           storeID,
+		BranchID:          req.BranchID,
 		Name:              req.Name,
-		Brand:             req.Brand,
+		BrandID:           req.BrandID,
 		Model:             req.Model,
 		PriceUSD:          req.PriceUSD,
 		StockQuantity:     req.StockQuantity,
 		LowStockThreshold: req.LowStockThreshold,
+		Images:            req.Images,
 		IsAvailable:       true,
 		UpdatedAt:         time.Now(),
 	}

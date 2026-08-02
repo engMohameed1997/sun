@@ -22,9 +22,11 @@ type Product struct {
 	ID                uuid.UUID       `db:"id" json:"id"`
 	CategoryID        *int            `db:"category_id" json:"category_id,omitempty"`
 	MerchantID        *uuid.UUID      `db:"merchant_id" json:"merchant_id,omitempty"`
+	StoreID           *uuid.UUID      `db:"store_id" json:"store_id,omitempty"`
+	BranchID          *uuid.UUID      `db:"branch_id" json:"branch_id,omitempty"`
 	SKU               string          `db:"sku" json:"sku"`
 	Name              string          `db:"name" json:"name"`
-	Brand             string          `db:"brand" json:"brand"`
+	BrandID           *uuid.UUID      `db:"brand_id" json:"brand_id,omitempty"`
 	Model             string          `db:"model" json:"model"`
 	Type              ProductType     `db:"type" json:"type"`
 	PriceUSD          float64         `db:"price_usd" json:"price_usd"`
@@ -37,6 +39,9 @@ type Product struct {
 	CreatedAt         time.Time       `db:"created_at" json:"created_at"`
 	UpdatedAt         time.Time       `db:"updated_at" json:"updated_at"`
 	DeletedAt         *time.Time      `db:"deleted_at" json:"deleted_at,omitempty"`
+	
+	// Joined fields
+	BrandName         string          `db:"brand_name" json:"brand_name,omitempty"`
 }
 
 func (p Product) AvailableQuantity() int {
@@ -49,9 +54,11 @@ func (p Product) AvailableQuantity() int {
 
 type UpdateProductRequest struct {
 	CategoryID        *int            `json:"category_id"`
+	StoreID           *uuid.UUID      `json:"store_id"`
+	BranchID          *uuid.UUID      `json:"branch_id"`
 	SKU               string          `json:"sku"`
 	Name              string          `json:"name"`
-	Brand             string          `json:"brand"`
+	BrandID           *uuid.UUID      `json:"brand_id"`
 	Model             string          `json:"model"`
 	Type              ProductType     `json:"type"`
 	PriceUSD          float64         `json:"price_usd"`
@@ -64,9 +71,11 @@ type UpdateProductRequest struct {
 
 type CreateProductRequest struct {
 	CategoryID        *int            `json:"category_id"`
+	StoreID           *uuid.UUID      `json:"store_id"`
+	BranchID          *uuid.UUID      `json:"branch_id"`
 	SKU               string          `json:"sku" binding:"required"`
 	Name              string          `json:"name" binding:"required"`
-	Brand             string          `json:"brand" binding:"required"`
+	BrandID           *uuid.UUID      `json:"brand_id" binding:"required"`
 	Model             string          `json:"model" binding:"required"`
 	Type              ProductType     `json:"type" binding:"required"`
 	PriceUSD          float64         `json:"price_usd" binding:"required,gt=0"`

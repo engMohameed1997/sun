@@ -83,8 +83,9 @@ export const UsersPage: React.FC = () => {
       });
       setIsModalOpen(false);
       fetchUsers();
-    } catch (err) {
-      alert('فشل إضافة المستخدم');
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.response?.data?.error || 'فشل إضافة المستخدم';
+      alert(msg);
     }
   };
 
@@ -224,6 +225,7 @@ export const UsersPage: React.FC = () => {
                 <input
                   type="password"
                   required
+                  minLength={6}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100"

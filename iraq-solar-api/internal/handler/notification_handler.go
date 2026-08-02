@@ -20,10 +20,14 @@ func NewNotificationHandler(repo *repository.NotificationRepository) *Notificati
 }
 
 func (h *NotificationHandler) ListNotifications(c *gin.Context) {
-	userIDStr := c.GetString("user_id")
-	userID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", err)
+	userIDVal, ok := c.Get("user_id")
+	if !ok {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
+		return
+	}
+	userID, ok := userIDVal.(uuid.UUID)
+	if !ok {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
 		return
 	}
 
@@ -52,10 +56,14 @@ func (h *NotificationHandler) ListNotifications(c *gin.Context) {
 }
 
 func (h *NotificationHandler) UnreadCount(c *gin.Context) {
-	userIDStr := c.GetString("user_id")
-	userID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", err)
+	userIDVal, ok := c.Get("user_id")
+	if !ok {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
+		return
+	}
+	userID, ok := userIDVal.(uuid.UUID)
+	if !ok {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
 		return
 	}
 
@@ -90,14 +98,18 @@ func (h *NotificationHandler) MarkAsRead(c *gin.Context) {
 }
 
 func (h *NotificationHandler) MarkAllAsRead(c *gin.Context) {
-	userIDStr := c.GetString("user_id")
-	userID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", err)
+	userIDVal, ok := c.Get("user_id")
+	if !ok {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
+		return
+	}
+	userID, ok := userIDVal.(uuid.UUID)
+	if !ok {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
 		return
 	}
 
-	err = h.repo.MarkAllAsRead(c.Request.Context(), userID)
+	err := h.repo.MarkAllAsRead(c.Request.Context(), userID)
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusInternalServerError, "حدث خطأ أثناء تحديث الإشعارات", "INTERNAL_ERROR", err)
 		return

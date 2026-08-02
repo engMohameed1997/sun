@@ -1,37 +1,74 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Plus, Search, Edit2, Trash2, AlertTriangle, Image as ImageIcon } from 'lucide-react';
+import { Package, Search, Plus, Edit2, Trash2, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { api } from '../services/api';
-import type { Product, ProductType } from '../types';
+import type { Product, ProductType, Category, Store } from '../types';
 import { useAuth } from '../context/AuthContext';
 
 export const ProductsPage: React.FC = () => {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [products, setProducts] = useState<Product[]>([]);
-  const [search, setSearch] = useState('');
-  const [typeFilter] = useState('');
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedType, setSelectedType] = useState<ProductType | ''>('');
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-  // Form State
+  // Form states
   const [sku, setSku] = useState('');
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [type, setType] = useState<ProductType>('panel');
-  const [priceUSD, setPriceUSD] = useState(0);
-  const [stockQuantity, setStockQuantity] = useState(10);
-  const [lowStockThreshold, setLowStockThreshold] = useState(5);
+  const [categoryId, setCategoryId] = useState<number | ''>('');
+  const [storeId, setStoreId] = useState<string>('');
+  const [branchId, setBranchId] = useState<string>('');
+  const [priceUSD, setPriceUSD] = useState<number>(0);
+  const [stockQuantity, setStockQuantity] = useState<number>(0);
+  const [lowStockThreshold, setLowStockThreshold] = useState<number>(5);
   const [imageUrl, setImageUrl] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
 
+  const fetchInitialData = async () => {
+    try {
+      // Fetch Categories
+      const catRes = await api.get('/categories');
+      if (catRes.data?.data) {
+        setCategories(catRes.data.data);
+      }
+
+      // Fetch Stores (for Admin, fetch all. For Merchant, fetch own)
+      if (isAdmin) {
+         const storeRes = await api.get('/admin/stores');
+         if (storeRes.data?.data?.stores) setStores(storeRes.data.data.stores);
+      } else {
+         // Merchant logic: normally backend would return only their stores
+         const storeRes = await api.get('/admin/stores'); // Might need a specific endpoint for merchant stores
+         if (storeRes.data?.data?.stores) {
+            const myStores = storeRes.data.data.stores.filter((s: Store) => s.merchant_id === user?.id);
+            setStores(myStores);
+            if (myStores.length > 0) setStoreId(myStores[0].id);
+         }
+      }
+    } catch (err) {
+      console.error('Failed to load initial data', err);
+    }
+  };
+
   const fetchProducts = async () => {
     try {
-      const endpoint = user?.role === 'merchant' ? '/merchant/products' : '/admin/products';
-      const res = await api.get(`${endpoint}?type=${typeFilter}&search=${search}`);
+      const endpoint = isAdmin ? '/admin/products' : '/products/merchant/me';
+      const res = await api.get(endpoint, {
+        params: { search: searchQuery, type: selectedType }
+      });
       if (res.data?.data?.products) {
         setProducts(res.data.data.products);
       } else {
-        setProducts([]);
+        // Fallback for merchant endpoint if it returns list directly
+        setProducts(res.data?.data || []);
       }
     } catch (err) {
       console.error('Failed to fetch products', err);
@@ -39,24 +76,24 @@ export const ProductsPage: React.FC = () => {
   };
 
   useEffect(() => {
+    fetchInitialData();
+  }, [isAdmin, user?.id]);
+
+  useEffect(() => {
     fetchProducts();
-  }, [typeFilter]);
+  }, [searchQuery, selectedType]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('image', file);
+    if (!e.target.files?.[0]) return;
     setUploadingImage(true);
+    const formData = new FormData();
+    formData.append('file', e.target.files[0]);
 
     try {
-      const res = await api.post('/upload/image', formData, {
+      const res = await api.post('/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      if (res.data?.data?.url) {
-        setImageUrl(res.data.data.url);
-      }
+      setImageUrl(res.data?.data?.url || '');
     } catch (err) {
       alert('فشل رفع الصورة');
     } finally {
@@ -73,34 +110,50 @@ export const ProductsPage: React.FC = () => {
         brand,
         model,
         type,
-        price_usd: Number(priceUSD),
-        stock_quantity: Number(stockQuantity),
-        low_stock_threshold: Number(lowStockThreshold),
+        category_id: categoryId ? Number(categoryId) : undefined,
+        store_id: storeId || undefined,
+        branch_id: branchId || undefined,
+        price_usd: priceUSD,
+        stock_quantity: stockQuantity,
+        low_stock_threshold: lowStockThreshold,
         images: imageUrl ? [imageUrl] : [],
       };
 
       if (editingProduct) {
-        await api.put(`/admin/products/${editingProduct.id}`, payload);
+        const endpoint = isAdmin ? `/admin/products/${editingProduct.id}` : `/products/merchant/${editingProduct.id}`;
+        await api.put(endpoint, payload);
+        alert('تم التعديل بنجاح');
       } else {
-        await api.post('/admin/products', payload);
+        // Create endpoint depends on role, or if admin is creating on behalf of someone
+        // But for now let's use the merchant endpoint if it's a merchant, admin endpoint otherwise
+        const endpoint = isAdmin ? '/admin/products' : '/products/merchant'; 
+        // Note: The backend admin handler doesn't have a CreateProduct yet, we might need to use the public one if it accepts merchant_id
+        await api.post(endpoint, payload);
+        alert('تمت الإضافة بنجاح');
       }
 
       setIsModalOpen(false);
       fetchProducts();
-    } catch (err) {
-      alert('حدث خطأ أثناء حفظ المنتج');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'فشل حفظ المنتج');
     }
   };
 
   const handleSoftDelete = async (id: string) => {
-    if (!confirm('هل أنت تأكد من إخفاء/حذف هذا المنتج كـ Soft Delete؟')) return;
+    if (!window.confirm('هل أنت متأكد من إخفاء هذا المنتج؟')) return;
     try {
-      await api.delete(`/admin/products/${id}`);
+      const endpoint = isAdmin ? `/admin/products/${id}` : `/products/merchant/${id}`;
+      await api.delete(endpoint);
+      alert('تم إخفاء المنتج بنجاح');
       fetchProducts();
     } catch (err) {
-      alert('فشل إخفاء المنتج');
+      alert('فشل الإخفاء');
     }
   };
+
+  // Find branches for the selected store
+  const selectedStore = stores.find(s => s.id === storeId);
+  const availableBranches = selectedStore?.branches || [];
 
   return (
     <div className="space-y-6">
@@ -108,87 +161,89 @@ export const ProductsPage: React.FC = () => {
         <div>
           <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2">
             <Package className="text-amber-400" size={22} />
-            إدارة المنتجات وحجز المخزون
+            {isAdmin ? 'إدارة كتالوج المنتجات' : 'إدارة منتجات متجري'}
           </h1>
-          <p className="text-slate-400 text-xs mt-1">التحكم بالمنتجات، تفاصيل المخزون المحجوز والمتاح، والتنبيهات الحادة</p>
+          <p className="text-slate-400 text-xs mt-1">تتبع المخزون، وتحديث الأسعار والمواصفات للمنظومات الشمسية</p>
         </div>
-
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="بحث بالاسم أو الـ SKU..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && fetchProducts()}
-              className="bg-slate-950/80 border border-slate-800 rounded-xl px-3.5 py-2 pl-9 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
-            />
-            <Search size={15} className="absolute left-3 top-2.5 text-slate-500" />
-          </div>
-
-          <button
-            onClick={() => {
-              setEditingProduct(null);
-              setSku(`SOL-${Math.floor(1000 + Math.random() * 9000)}`);
-              setName('');
-              setBrand('');
-              setModel('');
-              setPriceUSD(100);
-              setStockQuantity(20);
-              setImageUrl('');
-              setIsModalOpen(true);
-            }}
-            className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20"
-          >
-            <Plus size={16} /> إضافة منتج جديد
-          </button>
-        </div>
+        <button
+          onClick={() => {
+            setEditingProduct(null);
+            setSku(''); setName(''); setBrand(''); setModel(''); setType('panel'); 
+            setPriceUSD(0); setStockQuantity(0); setLowStockThreshold(5); setImageUrl('');
+            setCategoryId('');
+            setBranchId('');
+            setIsModalOpen(true);
+          }}
+          className="bg-amber-500 hover:bg-amber-600 text-slate-950 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition cursor-pointer"
+        >
+          <Plus size={18} />
+          إضافة منتج جديد
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="flex flex-col sm:flex-row gap-4 mb-4">
+        <div className="relative flex-1">
+          <Search className="absolute right-3 top-2.5 text-slate-500" size={18} />
+          <input
+            type="text"
+            placeholder="ابحث برمز SKU، الاسم، أو الماركة..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-slate-900 border border-slate-800 rounded-xl pr-10 pl-4 py-2 text-slate-200 outline-none focus:border-amber-500/50 text-sm"
+          />
+        </div>
+        <select
+          value={selectedType}
+          onChange={(e) => setSelectedType(e.target.value as ProductType | '')}
+          className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-slate-200 outline-none focus:border-amber-500/50 text-sm"
+        >
+          <option value="">جميع الأنواع</option>
+          <option value="panel">ألواح شمسية</option>
+          <option value="inverter">عواكس (Inverters)</option>
+          <option value="battery">بطاريات</option>
+          <option value="structure">هياكل تثبيت</option>
+          <option value="cable">كابلات</option>
+          <option value="accessory">ملحقات</option>
+        </select>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {products.map((p) => {
-          const availableQty = p.stock_quantity - p.reserved_quantity;
+          const availableQty = p.stock_quantity - (p.reserved_quantity || 0);
           const isLowStock = availableQty <= p.low_stock_threshold;
 
           return (
-            <div
-              key={p.id}
-              className={`bg-slate-900 border rounded-2xl p-5 space-y-4 relative overflow-hidden transition hover:border-slate-700 ${
-                isLowStock ? 'border-rose-500/40 bg-rose-500/5' : 'border-slate-800'
-              }`}
-            >
+            <div key={p.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col gap-4 relative overflow-hidden group">
               {isLowStock && (
-                <div className="absolute top-3 left-3 bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <AlertTriangle size={12} /> مخزون منخفض
+                <div className="absolute top-0 right-0 bg-rose-500/90 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg flex items-center gap-1 z-10">
+                  <AlertTriangle size={10} />
+                  مخزون منخفض
                 </div>
               )}
 
-              <div className="flex items-start gap-4">
-                <div className="w-16 h-16 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center overflow-hidden shrink-0">
+              <div className="flex gap-3">
+                <div className="w-16 h-16 rounded-xl bg-slate-800 border border-slate-700 flex-shrink-0 overflow-hidden flex items-center justify-center text-slate-500">
                   {p.images && p.images[0] ? (
                     <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover" />
                   ) : (
-                    <ImageIcon className="text-slate-600" size={24} />
+                    <ImageIcon size={24} />
                   )}
                 </div>
-
-                <div className="space-y-1 min-w-0">
-                  <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md uppercase">
-                    {p.type}
-                  </span>
-                  <h3 className="font-bold text-slate-100 text-sm truncate">{p.name}</h3>
-                  <div className="text-xs text-slate-400">{p.brand} - {p.model}</div>
+                <div>
+                  <h3 className="font-bold text-slate-200 text-sm line-clamp-2 leading-snug">{p.name}</h3>
+                  <div className="text-xs text-slate-400 mt-1">{p.brand} • {p.model}</div>
+                  <div className="text-[10px] text-amber-500/80 font-mono mt-1">SKU: {p.sku}</div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 bg-slate-950/70 p-3 rounded-xl border border-slate-800/80 text-center text-xs">
+              <div className="grid grid-cols-3 gap-2 bg-slate-950/50 p-2 rounded-xl border border-slate-800/50 text-center">
                 <div>
                   <span className="text-slate-500 block text-[10px]">السعر</span>
                   <span className="font-bold text-emerald-400">${p.price_usd}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[10px]">المحجوز</span>
-                  <span className="font-bold text-amber-400">{p.reserved_quantity}</span>
+                  <span className="font-bold text-amber-400">{p.reserved_quantity || 0}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block text-[10px]">المتاح للبيع</span>
@@ -198,7 +253,7 @@ export const ProductsPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800/60">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800/60 mt-auto">
                 <button
                   onClick={() => {
                     setEditingProduct(p);
@@ -211,15 +266,18 @@ export const ProductsPage: React.FC = () => {
                     setStockQuantity(p.stock_quantity);
                     setLowStockThreshold(p.low_stock_threshold);
                     setImageUrl(p.images?.[0] || '');
+                    setCategoryId(p.category_id || '');
+                    setStoreId(p.store_id || '');
+                    setBranchId(p.branch_id || '');
                     setIsModalOpen(true);
                   }}
-                  className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs flex items-center gap-1 font-medium transition"
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs flex items-center gap-1 font-medium transition cursor-pointer"
                 >
                   <Edit2 size={14} /> تعديل
                 </button>
                 <button
                   onClick={() => handleSoftDelete(p.id)}
-                  className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-lg text-xs flex items-center gap-1 font-medium transition"
+                  className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-lg text-xs flex items-center gap-1 font-medium transition cursor-pointer"
                 >
                   <Trash2 size={14} /> إخفاء
                 </button>
@@ -231,7 +289,7 @@ export const ProductsPage: React.FC = () => {
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 space-y-5">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-slate-100">
               {editingProduct ? 'تعديل بيانات المنتج' : 'إضافة منتج جديد'}
             </h3>
@@ -239,7 +297,7 @@ export const ProductsPage: React.FC = () => {
             <form onSubmit={handleSaveProduct} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1">رمز المنتج (SKU)</label>
+                  <label className="block text-slate-400 mb-1">رمز المنتج (SKU) *</label>
                   <input
                     type="text"
                     required
@@ -249,7 +307,7 @@ export const ProductsPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">نوع المنتج</label>
+                  <label className="block text-slate-400 mb-1">نوع المنتج *</label>
                   <select
                     value={type}
                     onChange={(e) => setType(e.target.value as ProductType)}
@@ -265,8 +323,58 @@ export const ProductsPage: React.FC = () => {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">التصنيف *</label>
+                  <select
+                    required
+                    value={categoryId}
+                    onChange={(e) => setCategoryId(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100"
+                  >
+                    <option value="">-- اختر التصنيف --</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">المتجر *</label>
+                  <select
+                    required
+                    value={storeId}
+                    onChange={(e) => {
+                      setStoreId(e.target.value);
+                      setBranchId(''); // reset branch when store changes
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100"
+                  >
+                    <option value="">-- اختر المتجر --</option>
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {availableBranches.length > 0 && (
+                <div>
+                  <label className="block text-slate-400 mb-1">الفرع المتوفر به المنتج (اختياري)</label>
+                  <select
+                    value={branchId}
+                    onChange={(e) => setBranchId(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100"
+                  >
+                    <option value="">-- متوفر في جميع الفروع --</option>
+                    {availableBranches.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name} ({b.governorate_name_ar})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
-                <label className="block text-slate-400 mb-1">اسم المنتج الكامل</label>
+                <label className="block text-slate-400 mb-1">اسم المنتج الكامل *</label>
                 <input
                   type="text"
                   required
@@ -279,7 +387,7 @@ export const ProductsPage: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1">الماركة (Brand)</label>
+                  <label className="block text-slate-400 mb-1">الماركة (Brand) *</label>
                   <input
                     type="text"
                     required
@@ -290,7 +398,7 @@ export const ProductsPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">الموديل (Model)</label>
+                  <label className="block text-slate-400 mb-1">الموديل (Model) *</label>
                   <input
                     type="text"
                     required
@@ -303,7 +411,7 @@ export const ProductsPage: React.FC = () => {
 
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1">السعر ($ USD)</label>
+                  <label className="block text-slate-400 mb-1">السعر ($ USD) *</label>
                   <input
                     type="number"
                     required
@@ -313,7 +421,7 @@ export const ProductsPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">كمية المخزون الكلي</label>
+                  <label className="block text-slate-400 mb-1">المخزون الكلي *</label>
                   <input
                     type="number"
                     required
@@ -323,7 +431,7 @@ export const ProductsPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">حد المخزون الحرج</label>
+                  <label className="block text-slate-400 mb-1">حد المخزون الحرج *</label>
                   <input
                     type="number"
                     required
@@ -345,11 +453,11 @@ export const ProductsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl font-bold"
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl font-bold cursor-pointer"
                 >
                   إلغاء
                 </button>
-                <button type="submit" className="px-5 py-2 bg-amber-500 text-slate-950 rounded-xl font-bold">
+                <button type="submit" className="px-5 py-2 bg-amber-500 text-slate-950 rounded-xl font-bold cursor-pointer">
                   حفظ المنتج
                 </button>
               </div>
@@ -360,3 +468,5 @@ export const ProductsPage: React.FC = () => {
     </div>
   );
 };
+
+export default ProductsPage;

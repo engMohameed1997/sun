@@ -20,9 +20,10 @@ type HomeBanner struct {
 }
 
 type StoreBanner struct {
-	ID         uuid.UUID `db:"id" json:"id"`
-	MerchantID uuid.UUID `db:"merchant_id" json:"merchant_id"`
-	Title      *string   `db:"title" json:"title"`
+	ID         uuid.UUID  `db:"id" json:"id"`
+	MerchantID uuid.UUID  `db:"merchant_id" json:"merchant_id"`
+	StoreID    *uuid.UUID `db:"store_id" json:"store_id,omitempty"`
+	Title      *string    `db:"title" json:"title"`
 	ImageURL   string    `db:"image_url" json:"image_url"`
 	IsActive   bool      `db:"is_active" json:"is_active"`
 	CreatedAt  time.Time `db:"created_at" json:"created_at"`
@@ -51,8 +52,9 @@ type UpdateHomeBannerRequest struct {
 }
 
 type CreateStoreBannerRequest struct {
-	MerchantID uuid.UUID `json:"merchant_id" binding:"required"`
-	Title      *string   `json:"title"`
+	MerchantID uuid.UUID  `json:"merchant_id" binding:"required"`
+	StoreID    *uuid.UUID `json:"store_id"`
+	Title      *string    `json:"title"`
 	ImageURL   string    `json:"image_url" binding:"required"`
 	IsActive   *bool     `json:"is_active"`
 }

@@ -690,13 +690,13 @@ func (h *AdminHandler) VerifyStore(c *gin.Context) {
 
 func (h *AdminHandler) GetStoreDeliveryFees(c *gin.Context) {
 	idStr := c.Param("id")
-	merchantID, err := uuid.Parse(idStr)
+	storeID, err := uuid.Parse(idStr)
 	if err != nil {
 		utils.BadRequestError(c, "معرف المتجر غير صالح", err)
 		return
 	}
 
-	fees, err := h.adminService.GetStoreDeliveryFees(c.Request.Context(), merchantID)
+	fees, err := h.adminService.GetStoreDeliveryFees(c.Request.Context(), storeID)
 	if err != nil {
 		utils.InternalServerError(c, err)
 		return
@@ -705,12 +705,13 @@ func (h *AdminHandler) GetStoreDeliveryFees(c *gin.Context) {
 }
 
 type UpdateDeliveryFeesReq struct {
-	Fees []domain.UpdateDeliveryFeeRequest `json:"fees" binding:"required,min=1"`
+	MerchantID uuid.UUID                         `json:"merchant_id" binding:"required"`
+	Fees       []domain.UpdateDeliveryFeeRequest `json:"fees" binding:"required,min=1"`
 }
 
 func (h *AdminHandler) UpdateStoreDeliveryFees(c *gin.Context) {
 	idStr := c.Param("id")
-	merchantID, err := uuid.Parse(idStr)
+	storeID, err := uuid.Parse(idStr)
 	if err != nil {
 		utils.BadRequestError(c, "معرف المتجر غير صالح", err)
 		return
@@ -728,13 +729,13 @@ func (h *AdminHandler) UpdateStoreDeliveryFees(c *gin.Context) {
 		if fee.IsActive != nil {
 			isActive = *fee.IsActive
 		}
-		if err := h.adminService.UpsertStoreDeliveryFee(c.Request.Context(), adminID, merchantID, fee.GovernorateID, fee.FeeIQD, fee.EstimatedDays, isActive); err != nil {
+		if err := h.adminService.UpsertStoreDeliveryFee(c.Request.Context(), adminID, req.MerchantID, storeID, fee.GovernorateID, fee.FeeIQD, fee.EstimatedDays, isActive); err != nil {
 			utils.InternalServerError(c, err)
 			return
 		}
 	}
 
-	utils.SuccessResponse(c, http.StatusOK, "تم تحديث أسعار التوصيل بنجاح", gin.H{"merchant_id": merchantID})
+	utils.SuccessResponse(c, http.StatusOK, "تم تحديث أسعار التوصيل بنجاح", gin.H{"store_id": storeID})
 }
 
 // ─── Low Stock Products ───

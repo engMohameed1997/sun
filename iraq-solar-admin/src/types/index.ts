@@ -28,12 +28,55 @@ export interface User {
   updated_at: string;
 }
 
+export interface StoreBranch {
+  id: string;
+  store_id: string;
+  name: string;
+  governorate_id?: number;
+  city?: string;
+  address?: string;
+  phone?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  governorate_name_ar?: string;
+  governorate_name_en?: string;
+}
+
+export interface Store {
+  id: string;
+  merchant_id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  logo_url?: string;
+  cover_url?: string;
+  phone?: string;
+  email?: string;
+  is_verified: boolean;
+  is_active: boolean;
+  rating: number;
+  total_ratings: number;
+  created_at: string;
+  updated_at: string;
+  branches?: StoreBranch[];
+}
+
 export type ProductType = 'panel' | 'inverter' | 'battery' | 'structure' | 'cable' | 'accessory';
+
+export interface Category {
+  id: number;
+  name: string;
+  description: string;
+  created_at?: string;
+}
 
 export interface Product {
   id: string;
   category_id?: number;
   merchant_id?: string;
+  store_id?: string;
+  branch_id?: string;
   sku: string;
   name: string;
   brand: string;
@@ -91,6 +134,7 @@ export interface Order {
 export interface DeliveryFee {
   id: number;
   merchant_id: string;
+  store_id?: string;
   governorate_id: number;
   fee_iqd: number;
   estimated_days: number;

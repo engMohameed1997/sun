@@ -22,14 +22,18 @@ func NewProfileHandler(userRepo repository.UserRepository) *ProfileHandler {
 
 // GetProfile - GET /user/profile
 func (h *ProfileHandler) GetProfile(c *gin.Context) {
-	userIDStr := c.GetString("user_id")
-	userID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", err)
+	userID, ok := c.Get("user_id")
+	if !ok {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
+		return
+	}
+	uid, ok := userID.(uuid.UUID)
+	if !ok {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
 		return
 	}
 
-	user, err := h.userRepo.FindByID(c.Request.Context(), userID)
+	user, err := h.userRepo.FindByID(c.Request.Context(), uid)
 	if err != nil || user == nil {
 		utils.ErrorResponse(c, http.StatusNotFound, "لم يتم العثور على المستخدم", "NOT_FOUND", err)
 		return
@@ -51,10 +55,14 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 
 // UpdateProfile - PUT /user/profile
 func (h *ProfileHandler) UpdateProfile(c *gin.Context) {
-	userIDStr := c.GetString("user_id")
-	userID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", err)
+	userIDVal, ok := c.Get("user_id")
+	if !ok {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
+		return
+	}
+	userID, ok := userIDVal.(uuid.UUID)
+	if !ok {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
 		return
 	}
 
@@ -108,10 +116,14 @@ func (h *ProfileHandler) UpdateProfile(c *gin.Context) {
 
 // ChangePassword - PUT /user/password
 func (h *ProfileHandler) ChangePassword(c *gin.Context) {
-	userIDStr := c.GetString("user_id")
-	userID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", err)
+	userIDVal, ok := c.Get("user_id")
+	if !ok {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
+		return
+	}
+	userID, ok := userIDVal.(uuid.UUID)
+	if !ok {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
 		return
 	}
 

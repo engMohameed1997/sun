@@ -36,8 +36,8 @@ func (r *postgresProductRepository) Create(ctx context.Context, product *domain.
 	}
 
 	query := `
-		INSERT INTO products (id, category_id, merchant_id, sku, name, brand, model, type, price_usd, stock_quantity, reserved_quantity, low_stock_threshold, specifications, is_available, created_at, updated_at)
-		VALUES (:id, :category_id, :merchant_id, :sku, :name, :brand, :model, :type, :price_usd, :stock_quantity, :reserved_quantity, :low_stock_threshold, :specifications, :is_available, :created_at, :updated_at)
+		INSERT INTO products (id, category_id, merchant_id, store_id, branch_id, sku, name, brand_id, model, type, price_usd, stock_quantity, reserved_quantity, low_stock_threshold, specifications, is_available, created_at, updated_at)
+		VALUES (:id, :category_id, :merchant_id, :store_id, :branch_id, :sku, :name, :brand_id, :model, :type, :price_usd, :stock_quantity, :reserved_quantity, :low_stock_threshold, :specifications, :is_available, :created_at, :updated_at)
 	`
 
 	_, err := r.db.NamedExecContext(ctx, query, product)
@@ -53,7 +53,11 @@ func (r *postgresProductRepository) ListAll(ctx context.Context) ([]domain.Produ
 	}
 
 	var products []domain.Product
-	query := `SELECT id, category_id, merchant_id, sku, name, brand, model, type, price_usd, stock_quantity, reserved_quantity, low_stock_threshold, specifications, is_available, created_at, updated_at FROM products WHERE is_available = true AND deleted_at IS NULL ORDER BY created_at DESC`
+	query := `SELECT p.id, p.category_id, p.merchant_id, p.store_id, p.branch_id, p.sku, p.name, p.brand_id, b.name AS brand_name, p.model, p.type, p.price_usd, p.stock_quantity, p.reserved_quantity, p.low_stock_threshold, p.specifications, p.is_available, p.created_at, p.updated_at 
+                  FROM products p 
+                  LEFT JOIN brands b ON p.brand_id = b.id 
+                  WHERE p.is_available = true AND p.deleted_at IS NULL 
+                  ORDER BY p.created_at DESC`
 	err := r.db.SelectContext(ctx, &products, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list products: %w", err)
@@ -67,7 +71,10 @@ func (r *postgresProductRepository) FindByID(ctx context.Context, id uuid.UUID) 
 	}
 
 	var product domain.Product
-	query := `SELECT id, category_id, merchant_id, sku, name, brand, model, type, price_usd, stock_quantity, reserved_quantity, low_stock_threshold, specifications, is_available, created_at, updated_at FROM products WHERE id = $1 AND deleted_at IS NULL LIMIT 1`
+	query := `SELECT p.id, p.category_id, p.merchant_id, p.store_id, p.branch_id, p.sku, p.name, p.brand_id, b.name AS brand_name, p.model, p.type, p.price_usd, p.stock_quantity, p.reserved_quantity, p.low_stock_threshold, p.specifications, p.is_available, p.created_at, p.updated_at 
+                  FROM products p 
+                  LEFT JOIN brands b ON p.brand_id = b.id 
+                  WHERE p.id = $1 AND p.deleted_at IS NULL LIMIT 1`
 	err := r.db.GetContext(ctx, &product, query, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -84,7 +91,10 @@ func (r *postgresProductRepository) FindByType(ctx context.Context, pType domain
 	}
 
 	var products []domain.Product
-	query := `SELECT id, category_id, merchant_id, sku, name, brand, model, type, price_usd, stock_quantity, reserved_quantity, low_stock_threshold, specifications, is_available, created_at, updated_at FROM products WHERE type = $1 AND is_available = true AND deleted_at IS NULL`
+	query := `SELECT p.id, p.category_id, p.merchant_id, p.store_id, p.branch_id, p.sku, p.name, p.brand_id, b.name AS brand_name, p.model, p.type, p.price_usd, p.stock_quantity, p.reserved_quantity, p.low_stock_threshold, p.specifications, p.is_available, p.created_at, p.updated_at 
+                  FROM products p 
+                  LEFT JOIN brands b ON p.brand_id = b.id 
+                  WHERE p.type = $1 AND p.is_available = true AND p.deleted_at IS NULL`
 	err := r.db.SelectContext(ctx, &products, query, pType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get products by type: %w", err)
@@ -98,7 +108,10 @@ func (r *postgresProductRepository) ListByMerchant(ctx context.Context, merchant
 	}
 
 	var products []domain.Product
-	query := `SELECT id, category_id, merchant_id, sku, name, brand, model, type, price_usd, stock_quantity, reserved_quantity, low_stock_threshold, specifications, is_available, created_at, updated_at FROM products WHERE merchant_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC`
+	query := `SELECT p.id, p.category_id, p.merchant_id, p.store_id, p.branch_id, p.sku, p.name, p.brand_id, b.name AS brand_name, p.model, p.type, p.price_usd, p.stock_quantity, p.reserved_quantity, p.low_stock_threshold, p.specifications, p.is_available, p.created_at, p.updated_at 
+                  FROM products p 
+                  LEFT JOIN brands b ON p.brand_id = b.id 
+                  WHERE p.merchant_id = $1 AND p.deleted_at IS NULL ORDER BY p.created_at DESC`
 	err := r.db.SelectContext(ctx, &products, query, merchantID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list merchant products: %w", err)
@@ -113,7 +126,7 @@ func (r *postgresProductRepository) Update(ctx context.Context, product *domain.
 
 	query := `
 		UPDATE products
-		SET name = :name, brand = :brand, model = :model, price_usd = :price_usd, stock_quantity = :stock_quantity, low_stock_threshold = :low_stock_threshold, is_available = :is_available, updated_at = NOW()
+		SET name = :name, brand_id = :brand_id, model = :model, store_id = :store_id, branch_id = :branch_id, price_usd = :price_usd, stock_quantity = :stock_quantity, low_stock_threshold = :low_stock_threshold, is_available = :is_available, updated_at = NOW()
 		WHERE id = :id AND deleted_at IS NULL
 	`
 	_, err := r.db.NamedExecContext(ctx, query, product)

@@ -85,8 +85,9 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
           }).toList();
         }
 
-        if (installersRes['data'] != null && installersRes['data'] is List) {
-          final installers = installersRes['data'] as List;
+        if (installersRes['data'] != null && installersRes['data'] is Map) {
+          final installersData = installersRes['data'] as Map<String, dynamic>;
+          final installers = installersData['installers'] as List? ?? [];
           _installersList = installers.map((i) {
             final im = i as Map<String, dynamic>;
             final gov = im['governorate'] ?? '';

@@ -17,10 +17,11 @@ const (
 )
 
 type OrderItem struct {
-	ID            uuid.UUID `db:"id" json:"id"`
-	OrderID       uuid.UUID `db:"order_id" json:"order_id"`
-	ProductID     uuid.UUID `db:"product_id" json:"product_id"`
-	Quantity      int       `db:"quantity" json:"quantity"`
+	ID            uuid.UUID  `db:"id" json:"id"`
+	OrderID       uuid.UUID  `db:"order_id" json:"order_id"`
+	ProductID     uuid.UUID  `db:"product_id" json:"product_id"`
+	StoreID       *uuid.UUID `db:"store_id" json:"store_id,omitempty"`
+	Quantity      int        `db:"quantity" json:"quantity"`
 	UnitPriceUSD  float64   `db:"unit_price_usd" json:"unit_price_usd"`
 	TotalPriceUSD float64   `db:"total_price_usd" json:"total_price_usd"`
 }
@@ -28,6 +29,7 @@ type OrderItem struct {
 type Order struct {
 	ID              uuid.UUID   `db:"id" json:"id"`
 	UserID          uuid.UUID   `db:"user_id" json:"user_id"`
+	StoreID         *uuid.UUID  `db:"store_id" json:"store_id,omitempty"`
 	Status          OrderStatus `db:"status" json:"status"`
 	TotalAmountUSD  float64     `db:"total_amount_usd" json:"total_amount_usd"`
 	ShippingAddress string      `db:"shipping_address" json:"shipping_address"`

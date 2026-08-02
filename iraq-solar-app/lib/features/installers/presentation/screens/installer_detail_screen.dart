@@ -24,6 +24,7 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _projectsPageController = PageController();
     _projects = (widget.installerData['projects'] as List<dynamic>?)
             ?.map((p) => Map<String, String>.from(p as Map))
             .toList() ??

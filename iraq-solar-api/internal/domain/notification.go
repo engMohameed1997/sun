@@ -17,8 +17,9 @@ const (
 )
 
 type Notification struct {
-	ID          uuid.UUID       `db:"id" json:"id"`
-	RecipientID uuid.UUID       `db:"recipient_id" json:"recipient_id"`
+	ID          uuid.UUID        `db:"id" json:"id"`
+	RecipientID uuid.UUID        `db:"recipient_id" json:"recipient_id"`
+	StoreID     *uuid.UUID       `db:"store_id" json:"store_id,omitempty"`
 	Type        NotificationType `db:"type" json:"type"`
 	Title       string          `db:"title" json:"title"`
 	Body        string          `db:"body" json:"body"`
