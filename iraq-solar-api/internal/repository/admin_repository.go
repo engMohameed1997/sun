@@ -76,40 +76,10 @@ type AdminRepository struct {
 }
 
 func NewAdminRepository(db *sqlx.DB) *AdminRepository {
-	repo := &AdminRepository{
+	return &AdminRepository{
 		db:       db,
 		memUsers: make([]domain.User, 0),
 	}
-	
-	// Sample initial stores for fallback when DB is disconnected
-	repo.memUsers = []domain.User{
-		{
-			ID:          uuid.New(),
-			FullName:    "شركة الشمس للطاقة - أحمد علي",
-			Email:       "merchant1@iraqsolar.iq",
-			Phone:       "07712345678",
-			Role:        domain.RoleMerchant,
-			Governorate: "بغداد",
-			City:        "الكرادة",
-			IsActive:    true,
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
-		},
-		{
-			ID:          uuid.New(),
-			FullName:    "العراق سولار - محمد حسن",
-			Email:       "merchant2@iraqsolar.iq",
-			Phone:       "07812345678",
-			Role:        domain.RoleMerchant,
-			Governorate: "البصرة",
-			City:        "الجزائر",
-			IsActive:    true,
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
-		},
-	}
-	
-	return repo
 }
 
 // ─── Users & Stores Management ───
@@ -294,14 +264,14 @@ func (r *AdminRepository) DashboardStats(ctx context.Context) (*DashboardStatsRe
 
 	if r.db == nil {
 		return &DashboardStatsResult{
-			TotalOrders:       142,
-			TotalRevenue:      185400.0,
-			TotalUsers:        len(r.memUsers) + 18,
-			TotalProducts:     45,
-			PendingOrders:     12,
-			NewUsersThisMonth: 8,
+			TotalOrders:       0,
+			TotalRevenue:      0.0,
+			TotalUsers:        len(r.memUsers),
+			TotalProducts:     0,
+			PendingOrders:     0,
+			NewUsersThisMonth: 0,
 			TotalStores:       totalStores,
-			ActiveInstallers:  18,
+			ActiveInstallers:  0,
 		}, nil
 	}
 
@@ -514,9 +484,164 @@ func (r *AdminRepository) CreateAuditLog(ctx context.Context, userID *uuid.UUID,
 	if r.db == nil {
 		return nil
 	}
-	payloadJSON, _ := json.Marshal(payload)
+
+	sanitizedPayload := sanitizePayload(payload)
+	payloadJSON, _ := json.Marshal(sanitizedPayload)
 	_, err := r.db.ExecContext(ctx, `INSERT INTO audit_logs (user_id, action, entity_name, entity_id, payload) VALUES ($1,$2,$3,$4,$5)`,
 		userID, action, entityName, entityID, payloadJSON)
+	return err
+}
+
+func sanitizePayload(payload interface{}) interface{} {
+	if payload == nil {
+		return nil
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return payload
+	}
+	var temp map[string]interface{}
+	if err := json.Unmarshal(data, &temp); err != nil {
+		return payload
+	}
+
+	sanitized := make(map[string]interface{})
+	for k, v := range temp {
+		lk := strings.ToLower(k)
+		if strings.Contains(lk, "password") || strings.Contains(lk, "token") || strings.Contains(lk, "secret") || strings.Contains(lk, "api_key") {
+			sanitized[k] = "[REDACTED]"
+		} else {
+			sanitized[k] = v
+		}
+	}
+	return sanitized
+}
+
+// ─── Store Verification & Delivery Fees ───
+
+func (r *AdminRepository) VerifyStore(ctx context.Context, storeID uuid.UUID, adminID uuid.UUID, isVerified bool) error {
+	r.mu.Lock()
+	for i, u := range r.memUsers {
+		if u.ID == storeID {
+			r.memUsers[i].IsVerified = isVerified
+			if isVerified {
+				now := time.Now()
+				r.memUsers[i].VerifiedAt = &now
+				r.memUsers[i].VerifiedBy = &adminID
+			} else {
+				r.memUsers[i].VerifiedAt = nil
+				r.memUsers[i].VerifiedBy = nil
+			}
+			break
+		}
+	}
+	r.mu.Unlock()
+
+	if r.db == nil {
+		return nil
+	}
+
+	if isVerified {
+		query := `UPDATE users SET is_verified = true, verified_at = NOW(), verified_by = $1, updated_at = NOW() WHERE id = $2 AND role = 'merchant'`
+		_, err := r.db.ExecContext(ctx, query, adminID, storeID)
+		return err
+	}
+	query := `UPDATE users SET is_verified = false, verified_at = NULL, verified_by = NULL, updated_at = NOW() WHERE id = $1 AND role = 'merchant'`
+	_, err := r.db.ExecContext(ctx, query, storeID)
+	return err
+}
+
+func (r *AdminRepository) GetStoreDeliveryFees(ctx context.Context, merchantID uuid.UUID) ([]domain.DeliveryFee, error) {
+	if r.db == nil {
+		return []domain.DeliveryFee{}, nil
+	}
+	var fees []domain.DeliveryFee
+	query := `
+		SELECT df.id, df.merchant_id, df.governorate_id, df.fee_iqd, df.estimated_days, df.is_active,
+		       g.name_ar AS governorate_name_ar, g.name_en AS governorate_name_en
+		FROM delivery_fees df
+		JOIN governorates g ON df.governorate_id = g.id
+		WHERE df.merchant_id = $1
+		ORDER BY g.id ASC
+	`
+	err := r.db.SelectContext(ctx, &fees, query, merchantID)
+	return fees, err
+}
+
+func (r *AdminRepository) UpsertStoreDeliveryFee(ctx context.Context, merchantID uuid.UUID, govID int, feeIQD float64, days int, isActive bool) error {
+	if r.db == nil {
+		return nil
+	}
+	query := `
+		INSERT INTO delivery_fees (merchant_id, governorate_id, fee_iqd, estimated_days, is_active)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (merchant_id, governorate_id)
+		DO UPDATE SET fee_iqd = EXCLUDED.fee_iqd, estimated_days = EXCLUDED.estimated_days, is_active = EXCLUDED.is_active
+	`
+	_, err := r.db.ExecContext(ctx, query, merchantID, govID, feeIQD, days, isActive)
+	return err
+}
+
+// ─── Merchant Products & Low Stock ───
+
+func (r *AdminRepository) ListMerchantProducts(ctx context.Context, merchantID uuid.UUID, pType, search string, page, perPage int) ([]domain.Product, int, error) {
+	if r.db == nil {
+		return []domain.Product{}, 0, nil
+	}
+	offset := (page - 1) * perPage
+	where := []string{"merchant_id = $1", "deleted_at IS NULL"}
+	args := []interface{}{merchantID}
+	argIdx := 2
+
+	if pType != "" {
+		where = append(where, fmt.Sprintf("type = $%d", argIdx))
+		args = append(args, pType)
+		argIdx++
+	}
+	if search != "" {
+		where = append(where, fmt.Sprintf("(name ILIKE $%d OR sku ILIKE $%d OR brand ILIKE $%d)", argIdx, argIdx, argIdx))
+		args = append(args, "%"+search+"%")
+		argIdx++
+	}
+
+	whereClause := strings.Join(where, " AND ")
+	var total int
+	r.db.GetContext(ctx, &total, fmt.Sprintf("SELECT COUNT(*) FROM products WHERE %s", whereClause), args...)
+
+	query := fmt.Sprintf("SELECT * FROM products WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", whereClause, argIdx, argIdx+1)
+	args = append(args, perPage, offset)
+
+	var products []domain.Product
+	err := r.db.SelectContext(ctx, &products, query, args...)
+	return products, total, err
+}
+
+func (r *AdminRepository) GetLowStockProducts(ctx context.Context) ([]domain.Product, error) {
+	if r.db == nil {
+		return []domain.Product{}, nil
+	}
+	query := `SELECT * FROM products WHERE (stock_quantity - reserved_quantity) <= low_stock_threshold AND deleted_at IS NULL ORDER BY (stock_quantity - reserved_quantity) ASC`
+	var products []domain.Product
+	err := r.db.SelectContext(ctx, &products, query)
+	return products, err
+}
+
+func (r *AdminRepository) GetOrderHistory(ctx context.Context, orderID uuid.UUID) ([]domain.OrderStatusHistory, error) {
+	if r.db == nil {
+		return []domain.OrderStatusHistory{}, nil
+	}
+	var history []domain.OrderStatusHistory
+	query := `SELECT id, order_id, from_status, to_status, changed_by, notes, created_at FROM order_status_history WHERE order_id = $1 ORDER BY created_at ASC`
+	err := r.db.SelectContext(ctx, &history, query, orderID)
+	return history, err
+}
+
+func (r *AdminRepository) RecordOrderStatusHistory(ctx context.Context, orderID uuid.UUID, fromStatus, toStatus string, changedBy *uuid.UUID, notes string) error {
+	if r.db == nil {
+		return nil
+	}
+	query := `INSERT INTO order_status_history (order_id, from_status, to_status, changed_by, notes) VALUES ($1, $2, $3, $4, $5)`
+	_, err := r.db.ExecContext(ctx, query, orderID, fromStatus, toStatus, changedBy, notes)
 	return err
 }
 
@@ -539,3 +664,4 @@ func (r *AdminRepository) UpsertSetting(ctx context.Context, key, value string) 
 		ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`, key, value)
 	return err
 }
+

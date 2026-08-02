@@ -21,7 +21,7 @@ func (r *NotificationRepository) Create(ctx context.Context, n *domain.Notificat
 		return nil
 	}
 	query := `INSERT INTO notifications (id, recipient_id, type, title, body, data, is_read) 
-			  VALUES ($1, $2, $3, $4, $5, $6) RETURNING created_at`
+			  VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING created_at`
 	return r.db.QueryRowContext(ctx, query, n.ID, n.RecipientID, n.Type, n.Title, n.Body, n.Data, n.IsRead).Scan(&n.CreatedAt)
 }
 
@@ -62,4 +62,12 @@ func (r *NotificationRepository) CountUnread(ctx context.Context, recipientID uu
 	var count int
 	err := r.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM notifications WHERE recipient_id = $1 AND is_read = false", recipientID)
 	return count, err
+}
+
+func (r *NotificationRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	if r.db == nil {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx, "DELETE FROM notifications WHERE id = $1", id)
+	return err
 }

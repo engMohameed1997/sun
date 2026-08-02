@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
+import '../../../../core/network/api_client.dart';
+import '../../../../core/services/auth_storage.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({Key? key}) : super(key: key);
@@ -10,24 +12,74 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  final _nameController = TextEditingController(text: 'أحمد علي العبيدي');
-  final _emailController = TextEditingController(text: 'ahmed.engineer@iraqsolar.iq');
-  final _phoneController = TextEditingController(text: '07701234567');
-  final _addressController = TextEditingController(text: 'بغداد - المنصور محلة 609');
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _addressController = TextEditingController();
   String _selectedCity = 'بغداد';
   String _preferredSystem = 'منظومة هجينة Hybrid 10 kW';
   bool _isLoading = false;
 
   final List<String> _cities = ['بغداد', 'البصرة', 'أربيل', 'النجف الأشرف', 'كربلاء المقدسة', 'الموصل', 'السليمانية', 'بابل'];
 
-  void _saveProfile() {
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final user = await AuthStorageService.getUser();
+    if (user != null && mounted) {
+      setState(() {
+        _nameController.text = user['full_name'] ?? '';
+        _emailController.text = user['email'] ?? '';
+        _phoneController.text = user['phone'] ?? '';
+        _addressController.text = user['city'] ?? '';
+        final gov = user['governorate'] ?? '';
+        if (_cities.contains(gov)) _selectedCity = gov;
+      });
+    }
+    // Also try fresh data from API
+    final res = await ApiClient.getUserProfile();
+    if (res['success'] == true && res['data'] != null && mounted) {
+      final data = res['data'];
+      setState(() {
+        _nameController.text = data['full_name'] ?? _nameController.text;
+        _emailController.text = data['email'] ?? _emailController.text;
+        _phoneController.text = data['phone'] ?? _phoneController.text;
+        _addressController.text = data['city'] ?? _addressController.text;
+        final gov = data['governorate'] ?? '';
+        if (_cities.contains(gov)) _selectedCity = gov;
+      });
+    }
+  }
+
+  void _saveProfile() async {
     setState(() => _isLoading = true);
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (mounted) {
-        setState(() => _isLoading = false);
+    final res = await ApiClient.updateProfile(
+      fullName: _nameController.text,
+      phone: _phoneController.text,
+      governorate: _selectedCity,
+      city: _addressController.text,
+    );
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (res['success'] == true) {
+        // Update local cache
+        final user = await AuthStorageService.getUser();
+        if (user != null) {
+          user['full_name'] = _nameController.text;
+          user['phone'] = _phoneController.text;
+          user['governorate'] = _selectedCity;
+          user['city'] = _addressController.text;
+          await AuthStorageService.saveUser(user);
+        }
         AppNotification.showSuccess(context, 'تم تحديث بيانات الملف الشخصي بنجاح 👤');
+      } else {
+        AppNotification.showError(context, res['message'] ?? 'فشل تحديث البيانات');
       }
-    });
+    }
   }
 
   @override

@@ -99,6 +99,25 @@ func (s *AuthService) ValidateToken(tokenStr string) (*Claims, error) {
 	return claims, nil
 }
 
+func (s *AuthService) ValidateTokenWithContext(ctx context.Context, tokenStr string) (*Claims, error) {
+	claims, err := s.ValidateToken(tokenStr)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.userRepo != nil {
+		user, err := s.userRepo.FindByID(ctx, claims.UserID)
+		if err == nil && user != nil {
+			if !user.IsActive {
+				return nil, errors.New("الحساب معطل أو محظور من قبل الإدارة")
+			}
+		}
+	}
+
+	return claims, nil
+}
+
+
 func (s *AuthService) RegisterUser(ctx context.Context, req domain.RegisterRequest) (*domain.User, string, string, error) {
 	if s.userRepo != nil {
 		existing, err := s.userRepo.FindByEmail(ctx, req.Email)

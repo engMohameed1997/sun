@@ -6,6 +6,8 @@ import '../../../products/presentation/screens/catalog_screen.dart';
 import '../../../installers/presentation/screens/installers_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 
+import '../../../products/presentation/screens/promotions_catalog_screen.dart';
+
 class MainNavigationScreen extends StatefulWidget {
   final int initialIndex;
   const MainNavigationScreen({Key? key, this.initialIndex = 0}) : super(key: key);
@@ -35,6 +37,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       SuperQiHomeScreen(
         onNavigateTab: _onTabSelect,
       ),
+      const PromotionsCatalogScreen(),
       const SolarCalculatorScreen(),
       const SolarCatalogScreen(),
       const SolarInstallersScreen(),
@@ -53,8 +56,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
             // Super Qi Style Persistent Floating Navigation Bar
             Positioned(
-              left: 16,
-              right: 16,
+              left: 12,
+              right: 12,
               bottom: 16,
               child: Container(
                 height: 65,
@@ -69,15 +72,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     ),
                   ],
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildNavItem(0, Icons.home_rounded, 'الرئيسية'),
-                    _buildNavItem(1, Icons.calculate_outlined, 'الحاسبة'),
-                    _buildNavItem(2, Icons.storefront_outlined, 'المتاجر'),
-                    _buildNavItem(3, Icons.engineering_outlined, 'الفنيين'),
-                    _buildNavItem(4, Icons.person_outline_rounded, 'الحساب'),
-                  ],
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildNavItem(0, Icons.home_rounded, 'الرئيسية'),
+                      _buildNavItem(1, Icons.local_offer_outlined, 'العروض'),
+                      _buildNavItem(2, Icons.calculate_outlined, 'الحاسبة'),
+                      _buildNavItem(3, Icons.storefront_outlined, 'المتاجر'),
+                      _buildNavItem(4, Icons.engineering_outlined, 'الفنيين'),
+                      _buildNavItem(5, Icons.person_outline_rounded, 'الحساب'),
+                    ],
+                  ),
                 ),
               ),
             ),

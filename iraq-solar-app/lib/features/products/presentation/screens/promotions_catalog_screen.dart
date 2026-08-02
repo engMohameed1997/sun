@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/product_image_widget.dart';
 import '../../../merchant/presentation/screens/store_detail_screen.dart';
+import 'product_detail_screen.dart';
 
 class PromotionsCatalogScreen extends StatefulWidget {
   const PromotionsCatalogScreen({Key? key}) : super(key: key);
@@ -11,6 +14,8 @@ class PromotionsCatalogScreen extends StatefulWidget {
 
 class _PromotionsCatalogScreenState extends State<PromotionsCatalogScreen> {
   int _selectedCategoryIndex = 0;
+  List<Map<String, dynamic>> _discountedProducts = [];
+  bool _isLoading = true;
 
   final List<String> _categories = [
     'الكل',
@@ -20,84 +25,56 @@ class _PromotionsCatalogScreenState extends State<PromotionsCatalogScreen> {
     'منظومات كاملة',
   ];
 
-  final List<Map<String, dynamic>> _discountedProducts = [
-    {
-      'id': 'off1',
-      'name': 'بطارية ليثيوم Felicity 10.2kWh LiFePO4 48V',
-      'category': 'بطاريات ليثيوم',
-      'originalPriceIQD': '2,500,000 د.ع',
-      'offerPriceIQD': '2,175,000 د.ع',
-      'savedIQD': 'وفرت 325,000 د.ع',
-      'discountPercent': 'خصم 15% 🔥',
-      'offerDetails': 'خصم خاص من متجر البصرة مع شحن وتوصيل فوري مجاني داخل المحافظة.',
-      'expiryDate': 'ينتهي العرض خلال 3 أيام',
-      'icon': Icons.battery_charging_full_rounded,
-      'storeData': {
-        'id': 's3',
-        'name': 'البصرة سولار تك المعتمد',
-        'rating': '4.9 ⭐',
-        'city': 'البصرة - حي الجزائر',
-        'phone': '07801122334',
-      },
-    },
-    {
-      'id': 'off2',
-      'name': 'انفيرتر هجين Deye 8kW Three Phase 48V',
-      'category': 'انفيرترات هجينة',
-      'originalPriceIQD': '2,100,000 د.ع',
-      'offerPriceIQD': '1,875,000 د.ع',
-      'savedIQD': 'وفرت 225,000 د.ع',
-      'discountPercent': 'خصم 10% ⚡',
-      'offerDetails': 'عرض صيف العراق شامل كفالة 5 سنوات استبدال ومعاينة مجانية.',
-      'expiryDate': 'ينتهي العرض بنهاية الأسبوع',
-      'icon': Icons.bolt_rounded,
-      'storeData': {
-        'id': 's2',
-        'name': 'دجلة للحلول الشمسية الهجينة',
-        'rating': '4.8 ⭐',
-        'city': 'أربيل - شارع العرصات',
-        'phone': '07509876543',
-      },
-    },
-    {
-      'id': 'off3',
-      'name': 'باك 10 ألواح شمسية LONGi 550W N-Type',
-      'category': 'ألواح شمسية',
-      'originalPriceIQD': '1,950,000 د.ع',
-      'offerPriceIQD': '1,750,000 د.ع',
-      'savedIQD': 'وفرت 200,000 د.ع',
-      'discountPercent': 'خصم الجملة 🏷️',
-      'offerDetails': 'عرض تصفية الموسم على ألواح التوبكون عالية الكفاءة مع قاعدة ألمنيوم مجانية.',
-      'expiryDate': 'تتوفر 15 وجبة فقط',
-      'icon': Icons.solar_power_rounded,
-      'storeData': {
-        'id': 's1',
-        'name': 'متجر بغداد للطاقة الشمولية',
-        'rating': '4.9 ⭐',
-        'city': 'بغداد - الكرادة شارع الصناعة',
-        'phone': '07701234567',
-      },
-    },
-    {
-      'id': 'off4',
-      'name': 'منظومة طاقة شمسية هجينة كاملة 10kW مع البطاريات',
-      'category': 'منظومات كاملة',
-      'originalPriceIQD': '7,200,000 د.ع',
-      'offerPriceIQD': '6,300,000 د.ع',
-      'savedIQD': 'وفرت 900,000 د.ع',
-      'discountPercent': 'باج التوفير الكلي 🌟',
-      'offerDetails': 'باقة المنظومة الجاهزة كاملة المكونات تشمل الألواح والانفيرتر والبطارية والتثبيت.',
-      'expiryDate': 'عرض حصري لفترة محدودة',
-      'icon': Icons.home_max_rounded,
-      'storeData': {
-        'id': 's1',
-        'name': 'متجر بغداد للطاقة الشمولية',
-        'rating': '4.9 ⭐',
-        'city': 'بغداد - الكرادة شارع الصناعة',
-        'phone': '07701234567',
-      },
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _fetchPromotions();
+  }
+
+  Future<void> _fetchPromotions() async {
+    final res = await ApiClient.getProducts();
+    if (mounted) {
+      setState(() {
+        if (res['data'] != null && res['data'] is List) {
+          final list = res['data'] as List;
+          _discountedProducts = list.map((item) {
+            final m = item as Map<String, dynamic>;
+            final priceUsd = (m['price_usd'] ?? 0.0).toDouble();
+            final priceRaw = (priceUsd * 1500).toInt();
+            final priceFormatted = '${priceRaw.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match match) => '${match[1]},')} د.ع';
+            return {
+              'id': m['id']?.toString() ?? '',
+              'name': m['name'] ?? '',
+              'category': m['category_id'] ?? 'منظومات شمسية',
+              'originalPriceIQD': priceFormatted,
+              'offerPriceIQD': priceFormatted,
+              'price': priceFormatted,
+              'price_iqd': priceRaw,
+              'savedIQD': 'عرض خاص',
+              'discountPercent': 'عرض خاص 🔥',
+              'offerDetails': 'عرض من المتجر المعتمد',
+              'expiryDate': 'لفترة محدودة',
+              'icon': Icons.local_offer_rounded,
+              'image': 'assets/images/solar_panel_longi.jpg',
+              'type': m['type'] ?? 'panel',
+              'brand': m['brand'] ?? 'علامة معتمدة',
+              'store': 'متجر معتمد',
+              'storeData': {
+                'id': m['merchant_id']?.toString() ?? '',
+                'name': 'متجر طاقة معتمد',
+                'rating': '4.9 ⭐',
+                'city': 'بغداد / المحافظات',
+                'phone': '07700000000',
+              },
+            };
+          }).toList();
+        } else {
+          _discountedProducts = [];
+        }
+        _isLoading = false;
+      });
+    }
+  }
 
   List<Map<String, dynamic>> get _filteredOffers {
     if (_selectedCategoryIndex == 0) return _discountedProducts;
@@ -289,17 +266,20 @@ class _PromotionsCatalogScreenState extends State<PromotionsCatalogScreen> {
                                 const SizedBox(height: 12),
 
                                 // Product Title & Icon
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.backgroundLight,
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: Icon(offer['icon'] as IconData, color: AppTheme.primaryGold, size: 32),
-                                    ),
-                                    const SizedBox(width: 12),
+                                 Row(
+                                   children: [
+                                     ClipRRect(
+                                       borderRadius: BorderRadius.circular(16),
+                                       child: SizedBox(
+                                         width: 64,
+                                         height: 64,
+                                         child: ProductImageWidget(
+                                           imagePath: offer['image'] as String?,
+                                           type: offer['type'] as String?,
+                                         ),
+                                       ),
+                                     ),
+                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,

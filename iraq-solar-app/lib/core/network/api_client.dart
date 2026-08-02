@@ -485,5 +485,165 @@ class ApiClient {
       return {'success': false, 'message': 'خطأ في الاتصال: $e'};
     }
   }
+
+  // 14. Live Stores List
+  static Future<Map<String, dynamic>> getStores() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/stores'), headers: headers());
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'success': false, 'message': 'فشل جلب المتاجر المحلية'};
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال بالسيرفر: $e'};
+    }
+  }
+
+  // 15. Live Banners List
+  static Future<Map<String, dynamic>> getBanners() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/banners'), headers: headers());
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'success': false, 'message': 'فشل جلب إعلانات البنرات'};
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال بالسيرفر: $e'};
+    }
+  }
+
+  // 16. Notifications
+  static Future<Map<String, dynamic>> getNotifications({int page = 1, int perPage = 20}) async {
+    try {
+      final h = await headersAsync();
+      final response = await http.get(
+        Uri.parse('$baseUrl/notifications?page=$page&per_page=$perPage'),
+        headers: h,
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'success': false, 'message': 'فشل جلب الإشعارات'};
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال بالسيرفر: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getUnreadNotificationCount() async {
+    try {
+      final h = await headersAsync();
+      final response = await http.get(
+        Uri.parse('$baseUrl/notifications/unread-count'),
+        headers: h,
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'success': false, 'message': 'فشل جلب عدد الإشعارات'};
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> markNotificationAsRead(String notificationId) async {
+    try {
+      final h = await headersAsync();
+      final response = await http.put(
+        Uri.parse('$baseUrl/notifications/$notificationId/read'),
+        headers: h,
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل تحديث الإشعار: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> markAllNotificationsAsRead() async {
+    try {
+      final h = await headersAsync();
+      final response = await http.put(
+        Uri.parse('$baseUrl/notifications/read-all'),
+        headers: h,
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل تحديث الإشعارات: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> deleteNotification(String notificationId) async {
+    try {
+      final h = await headersAsync();
+      final response = await http.delete(
+        Uri.parse('$baseUrl/notifications/$notificationId'),
+        headers: h,
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل حذف الإشعار: $e'};
+    }
+  }
+
+  // 17. Installers/Engineers Directory
+  static Future<Map<String, dynamic>> getInstallers({String? governorate, String? search, int page = 1, int perPage = 20}) async {
+    try {
+      String url = '$baseUrl/installers?page=$page&per_page=$perPage';
+      if (governorate != null && governorate.isNotEmpty && governorate != 'الكل') {
+        url += '&governorate=${Uri.encodeComponent(governorate)}';
+      }
+      if (search != null && search.isNotEmpty) {
+        url += '&search=${Uri.encodeComponent(search)}';
+      }
+      final response = await http.get(Uri.parse(url), headers: headers());
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'success': false, 'message': 'فشل جلب قائمة الفنيين'};
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال بالسيرفر: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getInstallerDetail(String installerId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/installers/$installerId'), headers: headers());
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {'success': false, 'message': 'فشل جلب تفاصيل الفني'};
+    } catch (e) {
+      return {'success': false, 'message': 'خطأ في الاتصال بالسيرفر: $e'};
+    }
+  }
+
+  // 18. Profile Update
+  static Future<Map<String, dynamic>> updateProfile({required String fullName, required String phone, required String governorate, required String city}) async {
+    try {
+      final h = await headersAsync();
+      final response = await http.put(
+        Uri.parse('$baseUrl/user/profile'),
+        headers: h,
+        body: jsonEncode({'full_name': fullName, 'phone': phone, 'governorate': governorate, 'city': city}),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل تحديث الملف الشخصي: $e'};
+    }
+  }
+
+  // 19. Change Password
+  static Future<Map<String, dynamic>> changePassword({required String oldPassword, required String newPassword}) async {
+    try {
+      final h = await headersAsync();
+      final response = await http.put(
+        Uri.parse('$baseUrl/user/password'),
+        headers: h,
+        body: jsonEncode({'old_password': oldPassword, 'new_password': newPassword}),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل تغيير كلمة المرور: $e'};
+    }
+  }
 }
 

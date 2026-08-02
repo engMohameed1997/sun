@@ -14,30 +14,8 @@ class MyOrdersHistoryScreen extends StatefulWidget {
 class _MyOrdersHistoryScreenState extends State<MyOrdersHistoryScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  final List<Map<String, dynamic>> _orders = [
-    {
-      'id': 'IQ-SOLAR-8902',
-      'date': '2026-07-25',
-      'status': 'قيد التوصيل والتركيب 🚚',
-      'statusColor': Colors.orange.shade800,
-      'totalIQD': '19,500,000 د.ع',
-      'itemsCount': 3,
-      'storeName': 'متجر بغداد للطاقة الشمولية',
-      'items': 'انفيرتر داي 8kW + 14 لوح لونجي 550W + بطارية فيليستي 10.2kWh',
-      'paymentMethod': 'الدفع نقداً عند المعاينة والتركيب',
-    },
-    {
-      'id': 'IQ-SOLAR-7714',
-      'date': '2026-06-18',
-      'status': 'تم التسليم والتشغيل بنجاح ✅',
-      'statusColor': Colors.green.shade700,
-      'totalIQD': '4,500,000 د.ع',
-      'itemsCount': 1,
-      'storeName': 'دجلة للحلول الشمسية الهجينة',
-      'items': 'بطارية ليثيوم Felicity 10.2kWh LiFePO4',
-      'paymentMethod': 'Zain Cash زين كاش',
-    },
-  ];
+  final List<Map<String, dynamic>> _orders = [];
+  bool _isLoadingOrders = true;
 
   @override
   void initState() {
@@ -71,11 +49,18 @@ class _MyOrdersHistoryScreenState extends State<MyOrdersHistoryScreen> with Sing
           }
           if (mounted) {
             setState(() {
-              _orders.insertAll(0, parsed);
+              _orders.addAll(parsed);
+              _isLoadingOrders = false;
             });
+            return;
           }
         }
       }
+    }
+    if (mounted) {
+      setState(() {
+        _isLoadingOrders = false;
+      });
     }
   }
 
@@ -91,14 +76,27 @@ class _MyOrdersHistoryScreenState extends State<MyOrdersHistoryScreen> with Sing
           bottom: TabBar(
             controller: _tabController,
             indicatorColor: AppTheme.primaryGold,
-            tabs: const [
-              Tab(text: 'الكل (2)'),
-              Tab(text: 'النشطة (1)'),
-              Tab(text: 'المكتملة (1)'),
+            tabs: [
+              Tab(text: 'الكل (${_orders.length})'),
+              Tab(text: 'النشطة (${_orders.where((o) => o['statusColor'] == Colors.orange.shade800).length})'),
+              Tab(text: 'المكتملة (${_orders.where((o) => o['statusColor'] == Colors.green.shade700).length})'),
             ],
           ),
         ),
-        body: ListView.builder(
+        body: _isLoadingOrders
+            ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryGold))
+            : _orders.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.shopping_bag_outlined, size: 70, color: Colors.grey.shade400),
+                        const SizedBox(height: 12),
+                        const Text('لا توجد طلبات حالياً', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.darkNavy)),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: _orders.length,
           itemBuilder: (context, index) {

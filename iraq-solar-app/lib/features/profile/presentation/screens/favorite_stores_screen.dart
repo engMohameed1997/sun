@@ -11,26 +11,7 @@ class FavoriteStoresScreen extends StatefulWidget {
 }
 
 class _FavoriteStoresScreenState extends State<FavoriteStoresScreen> {
-  final List<Map<String, dynamic>> _favoriteStores = [
-    {
-      'id': 's1',
-      'name': 'متجر بغداد للطاقة الشمولية',
-      'rating': '4.9 ⭐',
-      'city': 'بغداد - الكرادة شارع الصناعة',
-      'phone': '07701234567',
-      'verified': true,
-      'productsCount': 48,
-    },
-    {
-      'id': 's2',
-      'name': 'دجلة للحلول الشمسية الهجينة',
-      'rating': '4.8 ⭐',
-      'city': 'أربيل - شارع العرصات',
-      'phone': '07509876543',
-      'verified': true,
-      'productsCount': 35,
-    },
-  ];
+  final List<Map<String, dynamic>> _favoriteStores = [];
 
   void _removeFavorite(int index) {
     final store = _favoriteStores[index];
@@ -74,8 +55,10 @@ class _FavoriteStoresScreenState extends State<FavoriteStoresScreen> {
                       boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
                       border: Border.all(color: Colors.grey.shade200),
                     ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.all(16),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(16),
                       leading: Container(
                         width: 50,
                         height: 50,
@@ -116,7 +99,8 @@ class _FavoriteStoresScreenState extends State<FavoriteStoresScreen> {
                         );
                       },
                     ),
-                  );
+                  ),
+                );
                 },
               ),
       ),

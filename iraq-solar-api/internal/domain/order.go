@@ -51,4 +51,16 @@ type CreateOrderRequest struct {
 
 type UpdateOrderStatusRequest struct {
 	Status OrderStatus `json:"status" binding:"required"`
+	Notes  string      `json:"notes,omitempty"`
 }
+
+type OrderStatusHistory struct {
+	ID         uuid.UUID  `db:"id" json:"id"`
+	OrderID    uuid.UUID  `db:"order_id" json:"order_id"`
+	FromStatus *string    `db:"from_status" json:"from_status,omitempty"`
+	ToStatus   string     `db:"to_status" json:"to_status"`
+	ChangedBy  *uuid.UUID `db:"changed_by" json:"changed_by,omitempty"`
+	Notes      *string    `db:"notes" json:"notes,omitempty"`
+	CreatedAt  time.Time  `db:"created_at" json:"created_at"`
+}
+

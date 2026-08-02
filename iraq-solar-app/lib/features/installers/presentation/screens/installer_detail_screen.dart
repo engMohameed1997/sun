@@ -58,14 +58,15 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final name = widget.installerData['name'] ?? 'م. كرار العبيدي';
-    final role = widget.installerData['role'] ?? 'مهندس استشاري ومعاين طاقة شمسية';
-    final governorate = widget.installerData['governorate'] ?? 'بغداد - الكرادة';
-    final rating = widget.installerData['rating'] ?? '4.9 ⭐';
-    final reviews = widget.installerData['reviews'] ?? '58 تقييم';
-    final installs = widget.installerData['installs'] ?? '145 منظومة فحص وتثبيت';
-    final experience = widget.installerData['experience'] ?? '8 سنوات خبرة ميدانية';
-    final phone = widget.installerData['phone'] ?? '07701234567';
+    final name = widget.installerData['full_name'] ?? widget.installerData['name'] ?? 'فني';
+    final roleKey = widget.installerData['role'] ?? 'installer';
+    final role = roleKey == 'engineer' ? 'مهندس طاقة شمسية معتمد' : 'فني تركيب منظومات شمسية';
+    final gov = widget.installerData['governorate'] ?? '';
+    final city = widget.installerData['city'] ?? '';
+    final governorate = city.isNotEmpty ? '$gov - $city' : gov;
+    final phone = widget.installerData['phone'] ?? '';
+    final createdAt = widget.installerData['created_at'] ?? '';
+    final isVerified = widget.installerData['is_verified'] == true;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -192,11 +193,6 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
                                         const Icon(Icons.location_on_rounded, color: Colors.white70, size: 14),
                                         const SizedBox(width: 4),
                                         Text(governorate, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                                        const SizedBox(width: 10),
-                                        const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
-                                        const SizedBox(width: 2),
-                                        Text(rating, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                                        Text(' ($reviews)', style: const TextStyle(color: Colors.white60, fontSize: 10)),
                                       ],
                                     ),
                                   ],
@@ -228,9 +224,9 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceAround,
                             children: [
-                              _buildStatItem(Icons.verified_rounded, installs, 'إنجازات المنظومات'),
+                              _buildStatItem(Icons.verified_rounded, isVerified ? 'معتمد' : 'قيد المراجعة', 'حالة الاعتماد'),
                               Container(width: 1, height: 36, color: Colors.grey.shade300),
-                              _buildStatItem(Icons.work_history_rounded, experience, 'الخبرة الميدانية'),
+                              _buildStatItem(Icons.work_history_rounded, _calcExperience(createdAt), 'تاريخ الانضمام'),
                               Container(width: 1, height: 36, color: Colors.grey.shade300),
                               _buildStatItem(Icons.security_rounded, 'فحص رسمي', 'اعتمادية السلامة'),
                             ],
@@ -456,5 +452,18 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
         ],
       ),
     );
+  }
+
+  String _calcExperience(String createdAt) {
+    if (createdAt.isEmpty) return 'عضو جديد';
+    try {
+      final date = DateTime.parse(createdAt);
+      final diff = DateTime.now().difference(date);
+      if (diff.inDays > 365) return 'منذ ${diff.inDays ~/ 365} سنة';
+      if (diff.inDays > 30) return 'منذ ${diff.inDays ~/ 30} شهر';
+      return 'عضو جديد';
+    } catch (_) {
+      return 'عضو جديد';
+    }
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
+import '../../../../core/network/api_client.dart';
 
 class SecuritySettingsScreen extends StatefulWidget {
   const SecuritySettingsScreen({Key? key}) : super(key: key);
@@ -17,9 +18,17 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
   bool _twoFactorEnabled = true;
   bool _isLoading = false;
 
-  void _changePassword() {
+  void _changePassword() async {
+    if (_oldPassController.text.isEmpty) {
+      AppNotification.showError(context, 'يرجى كتابة كلمة المرور الحالية');
+      return;
+    }
     if (_newPassController.text.isEmpty) {
       AppNotification.showError(context, 'يرجى كتابة كلمة المرور الجديدة');
+      return;
+    }
+    if (_newPassController.text.length < 6) {
+      AppNotification.showError(context, 'كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل');
       return;
     }
     if (_newPassController.text != _confirmPassController.text) {
@@ -28,15 +37,21 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
     }
 
     setState(() => _isLoading = true);
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (mounted) {
-        setState(() => _isLoading = false);
+    final res = await ApiClient.changePassword(
+      oldPassword: _oldPassController.text,
+      newPassword: _newPassController.text,
+    );
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (res['success'] == true) {
         _oldPassController.clear();
         _newPassController.clear();
         _confirmPassController.clear();
-        AppNotification.showSuccess(context, 'تم تغيير كلمة المرور وتشفير الجلسة بنجاح 🔒');
+        AppNotification.showSuccess(context, 'تم تغيير كلمة المرور بنجاح 🔒');
+      } else {
+        AppNotification.showError(context, res['message'] ?? 'فشل تغيير كلمة المرور');
       }
-    });
+    }
   }
 
   @override

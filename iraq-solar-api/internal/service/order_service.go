@@ -109,3 +109,20 @@ func (s *OrderService) CancelOrder(ctx context.Context, orderID uuid.UUID) error
 	}
 	return nil
 }
+
+func (s *OrderService) StartPendingOrdersCleanupCron(ctx context.Context, interval time.Duration, expiryHours int) {
+	ticker := time.NewTicker(interval)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				if s.orderRepo != nil {
+					_, _ = s.orderRepo.CancelExpiredPendingOrders(ctx, expiryHours)
+				}
+			}
+		}
+	}()
+}

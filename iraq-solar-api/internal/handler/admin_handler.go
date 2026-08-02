@@ -654,3 +654,97 @@ func (h *AdminHandler) UpdateSetting(c *gin.Context) {
 
 	utils.SuccessResponse(c, http.StatusOK, "تم حفظ الإعداد بنجاح", gin.H{"key": req.Key, "value": req.Value})
 }
+
+// ─── Store Verification & Delivery Fees ───
+
+type VerifyStoreReq struct {
+	IsVerified bool `json:"is_verified"`
+}
+
+func (h *AdminHandler) VerifyStore(c *gin.Context) {
+	idStr := c.Param("id")
+	storeID, err := uuid.Parse(idStr)
+	if err != nil {
+		utils.BadRequestError(c, "معرف المتجر غير صالح", err)
+		return
+	}
+
+	var req VerifyStoreReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequestError(c, "بيانات التوثيق غير صالحة", err)
+		return
+	}
+
+	adminID := h.getAdminID(c)
+	if err := h.adminService.VerifyStore(c.Request.Context(), adminID, storeID, req.IsVerified); err != nil {
+		utils.InternalServerError(c, err)
+		return
+	}
+
+	msg := "تم توثيق المتجر بنجاح"
+	if !req.IsVerified {
+		msg = "تم إلغاء توثيق المتجر بنجاح"
+	}
+	utils.SuccessResponse(c, http.StatusOK, msg, gin.H{"store_id": storeID, "is_verified": req.IsVerified})
+}
+
+func (h *AdminHandler) GetStoreDeliveryFees(c *gin.Context) {
+	idStr := c.Param("id")
+	merchantID, err := uuid.Parse(idStr)
+	if err != nil {
+		utils.BadRequestError(c, "معرف المتجر غير صالح", err)
+		return
+	}
+
+	fees, err := h.adminService.GetStoreDeliveryFees(c.Request.Context(), merchantID)
+	if err != nil {
+		utils.InternalServerError(c, err)
+		return
+	}
+	utils.SuccessResponse(c, http.StatusOK, "تم جلب أسعار التوصيل بنجاح", fees)
+}
+
+type UpdateDeliveryFeesReq struct {
+	Fees []domain.UpdateDeliveryFeeRequest `json:"fees" binding:"required,min=1"`
+}
+
+func (h *AdminHandler) UpdateStoreDeliveryFees(c *gin.Context) {
+	idStr := c.Param("id")
+	merchantID, err := uuid.Parse(idStr)
+	if err != nil {
+		utils.BadRequestError(c, "معرف المتجر غير صالح", err)
+		return
+	}
+
+	var req UpdateDeliveryFeesReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.BadRequestError(c, "بيانات أسعار التوصيل غير صالحة", err)
+		return
+	}
+
+	adminID := h.getAdminID(c)
+	for _, fee := range req.Fees {
+		isActive := true
+		if fee.IsActive != nil {
+			isActive = *fee.IsActive
+		}
+		if err := h.adminService.UpsertStoreDeliveryFee(c.Request.Context(), adminID, merchantID, fee.GovernorateID, fee.FeeIQD, fee.EstimatedDays, isActive); err != nil {
+			utils.InternalServerError(c, err)
+			return
+		}
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "تم تحديث أسعار التوصيل بنجاح", gin.H{"merchant_id": merchantID})
+}
+
+// ─── Low Stock Products ───
+
+func (h *AdminHandler) LowStockProducts(c *gin.Context) {
+	products, err := h.adminService.GetLowStockProducts(c.Request.Context())
+	if err != nil {
+		utils.InternalServerError(c, err)
+		return
+	}
+	utils.SuccessResponse(c, http.StatusOK, "تم جلب المنتجات القليلة المخزون بنجاح", products)
+}
+

@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
+import '../../../../core/data/mock_products_repository.dart';
+import '../../../../core/widgets/product_image_widget.dart';
 import '../../../merchant/presentation/screens/store_detail_screen.dart';
+import 'product_detail_screen.dart';
 
 class SolarCatalogScreen extends StatefulWidget {
   const SolarCatalogScreen({Key? key}) : super(key: key);
@@ -27,142 +30,75 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
     'كوابل وملحقات',
   ];
 
-  final List<Map<String, dynamic>> _stores = [
-    {
-      'id': 's1',
-      'name': 'متجر بغداد للطاقة الشمولية',
-      'rating': '4.9 ⭐',
-      'city': 'بغداد - الكرادة شارع الصناعة',
-      'phone': '07701234567',
-      'verified': true,
-      'productsCount': 48,
-    },
-    {
-      'id': 's2',
-      'name': 'دجلة للحلول الشمسية الهجينة',
-      'rating': '4.8 ⭐',
-      'city': 'أربيل - شارع العرصات',
-      'phone': '07509876543',
-      'verified': true,
-      'productsCount': 35,
-    },
-    {
-      'id': 's3',
-      'name': 'البصرة سولار تك المعتمد',
-      'rating': '4.9 ⭐',
-      'city': 'البصرة - حي الجزائر',
-      'phone': '07801122334',
-      'verified': true,
-      'productsCount': 52,
-    },
-    {
-      'id': 's4',
-      'name': 'النجف تكنولوجي للطاقة النظيفة',
-      'rating': '4.7 ⭐',
-      'city': 'النجف الأشرف - شارع السنتر',
-      'phone': '07715544332',
-      'verified': true,
-      'productsCount': 28,
-    },
-  ];
-
-  final List<Map<String, dynamic>> _crossStoreProducts = [
-    {
-      'id': 'p1',
-      'name': 'لوح طاقة شمسية LONGi 550W N-Type TOPCon',
-      'category': 'ألواح شمسية',
-      'priceIQD': '175,000 د.ع',
-      'storeName': 'متجر بغداد للطاقة الشمولية',
-      'storeData': {
-        'id': 's1',
-        'name': 'متجر بغداد للطاقة الشمولية',
-        'rating': '4.9 ⭐',
-        'city': 'بغداد - الكرادة شارع الصناعة',
-      },
-      'city': 'بغداد - الكرادة',
-      'icon': Icons.solar_power_rounded,
-    },
-    {
-      'id': 'p2',
-      'name': 'انفيرتر هجين Deye 8kW Three Phase 48V',
-      'category': 'انفيرترات هجينة',
-      'priceIQD': '1,875,000 د.ع',
-      'storeName': 'دجلة للحلول الشمسية الهجينة',
-      'storeData': {
-        'id': 's2',
-        'name': 'دجلة للحلول الشمسية الهجينة',
-        'rating': '4.8 ⭐',
-        'city': 'أربيل - شارع العرصات',
-      },
-      'city': 'أربيل - العرصات',
-      'icon': Icons.bolt_rounded,
-    },
-    {
-      'id': 'p3',
-      'name': 'بطارية ليثيوم Felicity 10.2kWh LiFePO4',
-      'category': 'بطاريات ليثيوم',
-      'priceIQD': '2,175,000 د.ع',
-      'storeName': 'البصرة سولار تك المعتمد',
-      'storeData': {
-        'id': 's3',
-        'name': 'البصرة سولار تك المعتمد',
-        'rating': '4.9 ⭐',
-        'city': 'البصرة - حي الجزائر',
-      },
-      'city': 'البصرة - الجزائر',
-      'icon': Icons.battery_charging_full_rounded,
-    },
-    {
-      'id': 'p4',
-      'name': 'هيكل تثبيت ألمنيوم مقاوم للرياح 4 ألواح',
-      'category': 'هياكل تثبيت',
-      'priceIQD': '130,000 د.ع',
-      'storeName': 'متجر بغداد للطاقة الشمولية',
-      'storeData': {
-        'id': 's1',
-        'name': 'متجر بغداد للطاقة الشمولية',
-        'rating': '4.9 ⭐',
-        'city': 'بغداد - الكرادة شارع الصناعة',
-      },
-      'city': 'بغداد - الكرادة',
-      'icon': Icons.grid_on_rounded,
-    },
-    {
-      'id': 'p5',
-      'name': 'كابل طاقة شمسية نحاسي 6mm² - 100 متر',
-      'category': 'كوابل وملحقات',
-      'priceIQD': '145,000 د.ع',
-      'storeName': 'النجف تكنولوجي للطاقة النظيفة',
-      'storeData': {
-        'id': 's4',
-        'name': 'النجف تكنولوجي للطاقة النظيفة',
-        'rating': '4.7 ⭐',
-        'city': 'النجف الأشرف - شارع السنتر',
-      },
-      'city': 'النجف الأشرف',
-      'icon': Icons.cable_rounded,
-    },
-    {
-      'id': 'p6',
-      'name': 'منظومة طاقة شمسية كاملة 10kW مع البطاريات',
-      'category': 'باكات كاملة',
-      'priceIQD': '6,300,000 د.ع',
-      'storeName': 'متجر بغداد للطاقة الشمولية',
-      'storeData': {
-        'id': 's1',
-        'name': 'متجر بغداد للطاقة الشمولية',
-        'rating': '4.9 ⭐',
-        'city': 'بغداد - الكرادة شارع الصناعة',
-      },
-      'city': 'بغداد - الكرادة',
-      'icon': Icons.home_max_rounded,
-    },
-  ];
+  List<Map<String, dynamic>> _stores = [];
+  List<Map<String, dynamic>> _crossStoreProducts = [];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _fetchLiveApiData();
+  }
+
+  Future<void> _fetchLiveApiData() async {
+    final productsRes = await ApiClient.getProducts();
+    final storesRes = await ApiClient.getStores();
+
+    if (mounted) {
+      setState(() {
+        if (productsRes['data'] != null && productsRes['data'] is List) {
+          final list = productsRes['data'] as List;
+          _crossStoreProducts = list.map((item) {
+            final m = item as Map<String, dynamic>;
+            final priceUsd = (m['price_usd'] ?? 0.0).toDouble();
+            final priceRaw = (priceUsd * 1500).toInt();
+            final priceFormatted = '${priceRaw.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match match) => '${match[1]},')} د.ع';
+            return {
+              'id': m['id']?.toString() ?? '',
+              'name': m['name'] ?? '',
+              'brand': m['brand'] ?? 'علامة معتمدة',
+              'store': 'متجر معتمد',
+              'storeName': 'متجر طاقة معتمد',
+              'category': m['category_id'] ?? 'منظومات شمسية',
+              'price': priceFormatted,
+              'priceIQD': priceFormatted,
+              'price_iqd': priceRaw,
+              'price_usd': priceUsd,
+              'image': 'assets/images/solar_panel_longi.jpg',
+              'rating': '4.9 ⭐',
+              'warranty': '25 سنة كفالة كفاءة وتوليد',
+              'stock': m['stock_quantity'] ?? 50,
+              'type': m['type'] ?? 'panel',
+              'specs': m['specifications'] ?? {},
+              'isFeatured': true,
+              'storeData': {
+                'id': m['merchant_id']?.toString() ?? 's1',
+                'name': 'متجر طاقة معتمد',
+                'rating': '4.9 ⭐',
+                'city': 'بغداد / المحافظات',
+                'phone': '07700000000',
+              },
+              'city': 'بغداد / المحافظات',
+            };
+          }).toList();
+        }
+        if (storesRes['data'] != null && storesRes['data'] is List) {
+          final stores = storesRes['data'] as List;
+          _stores = stores.map((s) {
+            final sm = s as Map<String, dynamic>;
+            return {
+              'id': sm['id']?.toString() ?? '',
+              'name': sm['full_name'] ?? 'متجر طاقة معتمد',
+              'rating': '4.9 ⭐',
+              'city': '${sm['governorate'] ?? 'بغداد'} - ${sm['city'] ?? 'المركز'}',
+              'phone': sm['phone'] ?? '07700000000',
+              'verified': sm['is_verified'] ?? true,
+              'productsCount': 35,
+            };
+          }).toList();
+        }
+      });
+    }
   }
 
   @override
@@ -469,10 +405,17 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
                     final storeData = item['storeData'] as Map<String, dynamic>;
 
                     return GestureDetector(
-                      onTap: () => _navigateToStore(storeData),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ProductDetailScreen(product: item),
+                          ),
+                        );
+                      },
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(20),
@@ -480,14 +423,16 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
                         ),
                         child: Row(
                           children: [
-                            Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                color: AppTheme.backgroundLight,
-                                borderRadius: BorderRadius.circular(16),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: SizedBox(
+                                width: 64,
+                                height: 64,
+                                child: ProductImageWidget(
+                                  imagePath: item['image'] as String?,
+                                  type: item['type'] as String?,
+                                ),
                               ),
-                              child: Icon(item['icon'] as IconData, color: AppTheme.primaryGold, size: 28),
                             ),
                             const SizedBox(width: 14),
                             Expanded(
@@ -506,18 +451,27 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
                                     children: [
                                       const Icon(Icons.storefront_rounded, color: AppTheme.primaryGold, size: 14),
                                       const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Text(
-                                          'متوفر في: ${item['storeName']}',
-                                          style: const TextStyle(fontSize: 11, color: AppTheme.darkNavy, fontWeight: FontWeight.bold),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
+                                      Text(
+                                        'متوفر في: ${item['storeName']}',
+                                        style: const TextStyle(fontSize: 11, color: AppTheme.darkNavy, fontWeight: FontWeight.bold),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
+                                      if (storeData['verified'] == true) ...[
+                                        const SizedBox(width: 4),
+                                        const Icon(Icons.verified_rounded, color: Colors.blue, size: 14),
+                                        const SizedBox(width: 2),
+                                        const Text('موثق', style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold)),
+                                      ],
                                     ],
                                   ),
                                   const SizedBox(height: 2),
-                                  Text(item['city'] as String, style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                                  Text(
+                                    item['warranty'] ?? (item['city'] as String),
+                                    style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ],
                               ),
                             ),
@@ -536,7 +490,7 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
                                     color: AppTheme.darkNavy,
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  child: const Text('المتجر ←', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                  child: const Text('التفاصيل ←', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                                 ),
                               ],
                             ),

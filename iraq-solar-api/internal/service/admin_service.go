@@ -265,3 +265,51 @@ func (s *AdminService) UpdateSetting(ctx context.Context, adminID uuid.UUID, key
 	}
 	return err
 }
+
+// ─── Store Verification & Delivery Fees ───
+
+func (s *AdminService) VerifyStore(ctx context.Context, adminID, storeID uuid.UUID, isVerified bool) error {
+	err := s.adminRepo.VerifyStore(ctx, storeID, adminID, isVerified)
+	if err == nil {
+		action := "VERIFY_STORE"
+		if !isVerified {
+			action = "UNVERIFY_STORE"
+		}
+		_ = s.adminRepo.CreateAuditLog(ctx, &adminID, action, "store", storeID.String(), map[string]interface{}{
+			"is_verified": isVerified,
+		})
+	}
+	return err
+}
+
+func (s *AdminService) GetStoreDeliveryFees(ctx context.Context, merchantID uuid.UUID) ([]domain.DeliveryFee, error) {
+	return s.adminRepo.GetStoreDeliveryFees(ctx, merchantID)
+}
+
+func (s *AdminService) UpsertStoreDeliveryFee(ctx context.Context, adminID, merchantID uuid.UUID, govID int, feeIQD float64, days int, isActive bool) error {
+	err := s.adminRepo.UpsertStoreDeliveryFee(ctx, merchantID, govID, feeIQD, days, isActive)
+	if err == nil {
+		_ = s.adminRepo.CreateAuditLog(ctx, &adminID, "UPSERT_DELIVERY_FEE", "delivery_fee", merchantID.String(), map[string]interface{}{
+			"governorate_id": govID,
+			"fee_iqd":        feeIQD,
+			"estimated_days": days,
+			"is_active":      isActive,
+		})
+	}
+	return err
+}
+
+// ─── Merchant Products & Low Stock ───
+
+func (s *AdminService) ListMerchantProducts(ctx context.Context, merchantID uuid.UUID, pType, search string, page, perPage int) ([]domain.Product, int, error) {
+	return s.adminRepo.ListMerchantProducts(ctx, merchantID, pType, search, page, perPage)
+}
+
+func (s *AdminService) GetLowStockProducts(ctx context.Context) ([]domain.Product, error) {
+	return s.adminRepo.GetLowStockProducts(ctx)
+}
+
+func (s *AdminService) GetOrderHistory(ctx context.Context, orderID uuid.UUID) ([]domain.OrderStatusHistory, error) {
+	return s.adminRepo.GetOrderHistory(ctx, orderID)
+}
+

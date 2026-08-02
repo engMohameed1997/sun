@@ -8,6 +8,7 @@ import 'my_orders_history_screen.dart';
 import 'favorite_stores_screen.dart';
 import 'security_settings_screen.dart';
 import 'support_help_screen.dart';
+import '../../../../core/network/api_client.dart';
 
 class SolarProfileScreen extends StatefulWidget {
   const SolarProfileScreen({Key? key}) : super(key: key);
@@ -18,6 +19,40 @@ class SolarProfileScreen extends StatefulWidget {
 
 class _SolarProfileScreenState extends State<SolarProfileScreen> {
   String _userRole = 'زبون معتمد';
+  String _userName = '';
+  String _userEmail = '';
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final user = await AuthStorageService.getUser();
+    if (user != null && mounted) {
+      setState(() {
+        _userName = user['full_name'] ?? '';
+        _userEmail = user['email'] ?? '';
+        _userRole = user['role'] == 'engineer' ? 'مهندس' : (user['role'] == 'installer' ? 'فني' : 'زبون معتمد');
+        _isLoading = false;
+      });
+    }
+
+    final res = await ApiClient.getUserProfile();
+    if (res['success'] == true && res['data'] != null && mounted) {
+      final data = res['data'];
+      setState(() {
+        _userName = data['full_name'] ?? _userName;
+        _userEmail = data['email'] ?? _userEmail;
+        _userRole = data['role'] == 'engineer' ? 'مهندس' : (data['role'] == 'installer' ? 'فني' : 'زبون معتمد');
+        _isLoading = false;
+      });
+    } else {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   void _confirmLogout() {
     showDialog(
@@ -90,9 +125,9 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('أحمد علي العبيدي', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                              Text(_userName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
                               const SizedBox(height: 4),
-                              const Text('ahmed.engineer@iraqsolar.iq', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                              Text(_userEmail, style: const TextStyle(color: Colors.white70, fontSize: 12)),
                               const SizedBox(height: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -121,9 +156,9 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _buildStatItem('3', 'التصاميم المحفوظة'),
-                        _buildStatItem('2', 'سجل الطلبات'),
-                        _buildStatItem('2', 'المتاجر المفضلة'),
+                        _buildStatItem('-', 'التصاميم المحفوظة'),
+                        _buildStatItem('-', 'سجل الطلبات'),
+                        _buildStatItem('-', 'المتاجر المفضلة'),
                       ],
                     ),
                   ],
@@ -203,20 +238,23 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 3))],
         border: Border.all(color: isDestructive ? Colors.red.withOpacity(0.2) : Colors.grey.shade200),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: isDestructive ? Colors.red.shade50 : AppTheme.darkNavy.withOpacity(0.06),
-            borderRadius: BorderRadius.circular(14),
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          leading: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isDestructive ? Colors.red.shade50 : AppTheme.darkNavy.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: isDestructive ? Colors.red : AppTheme.darkNavy, size: 22),
           ),
-          child: Icon(icon, color: isDestructive ? Colors.red : AppTheme.darkNavy, size: 22),
+          title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDestructive ? Colors.red : AppTheme.darkNavy)),
+          subtitle: Text(subtitle, style: TextStyle(color: isDestructive ? Colors.red.shade300 : Colors.grey.shade600, fontSize: 11)),
+          trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
+          onTap: onTap,
         ),
-        title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isDestructive ? Colors.red : AppTheme.darkNavy)),
-        subtitle: Text(subtitle, style: TextStyle(color: isDestructive ? Colors.red.shade300 : Colors.grey.shade600, fontSize: 11)),
-        trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.grey),
-        onTap: onTap,
       ),
     );
   }

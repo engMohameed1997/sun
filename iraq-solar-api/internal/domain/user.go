@@ -26,6 +26,9 @@ type User struct {
 	Governorate  string    `db:"governorate" json:"governorate"`
 	City         string    `db:"city" json:"city"`
 	IsActive     bool       `db:"is_active" json:"is_active"`
+	IsVerified   bool       `db:"is_verified" json:"is_verified"`
+	VerifiedAt   *time.Time `db:"verified_at" json:"verified_at,omitempty"`
+	VerifiedBy   *uuid.UUID `db:"verified_by" json:"verified_by,omitempty"`
 	CreatedAt    time.Time  `db:"created_at" json:"created_at"`
 	UpdatedAt    time.Time  `db:"updated_at" json:"updated_at"`
 	DeletedAt    *time.Time `db:"deleted_at" json:"deleted_at,omitempty"`

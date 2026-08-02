@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
+import '../../../../core/network/api_client.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({Key? key}) : super(key: key);
@@ -11,74 +12,105 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-
-  final List<Map<String, dynamic>> _allNotifications = [
-    {
-      'id': '1',
-      'title': 'تأكيد طلب المنظومة الشمسية',
-      'body': 'تم قبول طلبك لشراء انفيرتر Deye 8kW بطارية ليثيوم من متجر بغداد للطاقة. جاري التجهيز.',
-      'time': 'منذ 15 دقيقة',
-      'category': 'orders',
-      'icon': Icons.shopping_bag_rounded,
-      'iconColor': AppTheme.primaryGold,
-      'isRead': false,
-    },
-    {
-      'id': '2',
-      'title': 'خصم خاص 15% على بطاريات LiFePO4',
-      'body': 'يقدم متجر دجلة للحلول الشمسية خصماً حصرياً على بطاريات Felicity 10.2kWh حتى نهاية الأسبوع.',
-      'time': 'منذ ساعتين',
-      'category': 'offers',
-      'icon': Icons.local_offer_rounded,
-      'iconColor': Color(0xFFEC4899),
-      'isRead': false,
-    },
-    {
-      'id': '3',
-      'title': 'تنبيه طقس شمسي: ارتفاع درجات الحرارة',
-      'body': 'درجات الحرارة المتوقعة في بغداد اليوم 46°م. نوصي بتنظيف الألواح وتفقد تهوية الانفيرتر.',
-      'time': 'اليوم 08:30 ص',
-      'category': 'system',
-      'icon': Icons.wb_sunny_rounded,
-      'iconColor': Color(0xFFF59E0B),
-      'isRead': true,
-    },
-    {
-      'id': '4',
-      'title': 'تقرير فحص الفني الميداني جاهز',
-      'body': 'أكمل م. كرار العبيدي التقرير الفني الميداني لمنظومتك في الكرادة. انقر لمعاينة التقرير.',
-      'time': 'أمس 04:15 م',
-      'category': 'orders',
-      'icon': Icons.engineering_rounded,
-      'iconColor': AppTheme.accentGreen,
-      'isRead': true,
-    },
-    {
-      'id': '5',
-      'title': 'عرض تركيب مجاني داخل البصرة',
-      'body': 'احصل على تركيب ومعاينة هندسية مجانية عند طلب أي منظومة 5kW وأكثر من متجر البصرة سولار.',
-      'time': 'منذ يومين',
-      'category': 'offers',
-      'icon': Icons.build_rounded,
-      'iconColor': Color(0xFF3B82F6),
-      'isRead': true,
-    },
-    {
-      'id': '6',
-      'title': 'تحديث التطبيق والنظام',
-      'body': 'تمت إضافة ميزة حساب الاسترداد المالي ROI المتقدمة داخل حاسبة الأحمال العراقية.',
-      'time': 'منذ 3 أيام',
-      'category': 'system',
-      'icon': Icons.system_security_update_good_rounded,
-      'iconColor': AppTheme.darkNavy,
-      'isRead': true,
-    },
-  ];
+  
+  List<Map<String, dynamic>> _allNotifications = [];
+  bool _isLoading = true;
+  bool _hasError = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _fetchNotifications();
+  }
+
+  Future<void> _fetchNotifications() async {
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
+
+    final res = await ApiClient.getNotifications(page: 1, perPage: 100);
+    
+    if (res['success'] == true && res['data'] != null && res['data']['notifications'] != null) {
+      final List<dynamic> notifs = res['data']['notifications'];
+      setState(() {
+        _allNotifications = notifs.map((n) {
+          return _mapNotification(n as Map<String, dynamic>);
+        }).toList();
+        _isLoading = false;
+      });
+    } else {
+      setState(() {
+        _hasError = true;
+        _isLoading = false;
+      });
+    }
+  }
+  
+  Map<String, dynamic> _mapNotification(Map<String, dynamic> data) {
+    final type = data['type'] ?? '';
+    
+    // category mapping
+    String category = 'offers';
+    if (type == 'new_order' || type == 'order_status') {
+      category = 'orders';
+    } else if (type == 'system') {
+      category = 'system';
+    }
+    
+    // icon mapping
+    IconData icon = Icons.notifications;
+    Color iconColor = AppTheme.primaryGold;
+    
+    if (type == 'new_order') {
+      icon = Icons.shopping_bag_rounded;
+      iconColor = AppTheme.primaryGold;
+    } else if (type == 'order_status') {
+      icon = Icons.local_shipping_rounded;
+      iconColor = AppTheme.accentGreen;
+    } else if (type == 'new_user') {
+      icon = Icons.person_add_rounded;
+      iconColor = const Color(0xFF3B82F6);
+    } else if (type == 'system') {
+      icon = Icons.system_security_update_good_rounded;
+      iconColor = AppTheme.darkNavy;
+    }
+
+    return {
+      'id': data['id'],
+      'title': data['title'] ?? 'بدون عنوان',
+      'body': data['body'] ?? '',
+      'time': _formatTime(data['created_at']),
+      'category': category,
+      'icon': icon,
+      'iconColor': iconColor,
+      'isRead': data['is_read'] ?? false,
+      'originalData': data,
+    };
+  }
+
+  String _formatTime(String? dateStr) {
+    if (dateStr == null) return '';
+    try {
+      final date = DateTime.parse(dateStr);
+      final now = DateTime.now();
+      final diff = now.difference(date);
+      
+      if (diff.inMinutes < 60) {
+        return 'منذ ${diff.inMinutes} دقيقة';
+      } else if (diff.inHours < 24) {
+        if (diff.inHours == 1) return 'منذ ساعة';
+        if (diff.inHours == 2) return 'منذ ساعتين';
+        return 'منذ ${diff.inHours} ساعات';
+      } else if (diff.inDays == 1) {
+        return 'أمس';
+      } else {
+        return 'منذ ${diff.inDays} أيام';
+      }
+    } catch (e) {
+      return '';
+    }
   }
 
   @override
@@ -87,16 +119,44 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
     super.dispose();
   }
 
-  void _markAllAsRead() {
-    setState(() {
-      for (var n in _allNotifications) {
-        n['isRead'] = true;
+  Future<void> _markAllAsRead() async {
+    final res = await ApiClient.markAllNotificationsAsRead();
+    if (res['success'] == true) {
+      setState(() {
+        for (var n in _allNotifications) {
+          n['isRead'] = true;
+        }
+      });
+      if (mounted) {
+        AppNotification.showSuccess(
+          context,
+          'تم تعليم جميع الإشعارات كمقروءة بنجاح 🔔',
+        );
       }
-    });
-    AppNotification.showSuccess(
-      context,
-      'تم تعليم جميع الإشعارات كقروءة بنجاح 🔔',
-    );
+    } else {
+      if (mounted) {
+        AppNotification.showError(context, res['message'] ?? 'فشل التحديث');
+      }
+    }
+  }
+  
+  Future<void> _markAsRead(Map<String, dynamic> item) async {
+    if (item['isRead'] == true) return;
+    
+    final res = await ApiClient.markNotificationAsRead(item['id']);
+    if (res['success'] == true) {
+      setState(() {
+        item['isRead'] = true;
+      });
+    }
+  }
+
+  Future<void> _deleteNotification(Map<String, dynamic> item) async {
+    final res = await ApiClient.deleteNotification(item['id']);
+    if (res['success'] != true && mounted) {
+      AppNotification.showError(context, res['message'] ?? 'فشل الحذف');
+      _fetchNotifications(); // restore if failed
+    }
   }
 
   List<Map<String, dynamic>> _getFilteredNotifications(String category) {
@@ -125,7 +185,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                 'مركز الإشعارات والتنبيهات',
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
               ),
-              if (_unreadCount > 0) ...[
+              if (!_isLoading && !_hasError && _unreadCount > 0) ...[
                 const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -142,14 +202,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
             ],
           ),
           actions: [
-            TextButton.icon(
-              onPressed: _markAllAsRead,
-              icon: const Icon(Icons.done_all_rounded, color: AppTheme.primaryGold, size: 18),
-              label: const Text(
-                'قراءة الكل',
-                style: TextStyle(color: AppTheme.primaryGold, fontSize: 12, fontWeight: FontWeight.bold),
+            if (!_isLoading && !_hasError && _allNotifications.isNotEmpty)
+              TextButton.icon(
+                onPressed: _markAllAsRead,
+                icon: const Icon(Icons.done_all_rounded, color: AppTheme.primaryGold, size: 18),
+                label: const Text(
+                  'قراءة الكل',
+                  style: TextStyle(color: AppTheme.primaryGold, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
               ),
-            ),
           ],
           bottom: TabBar(
             controller: _tabController,
@@ -167,16 +228,93 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
             ],
           ),
         ),
-        body: TabBarView(
-          controller: _tabController,
+        body: _buildBody(),
+      ),
+    );
+  }
+  
+  Widget _buildBody() {
+    if (_isLoading) {
+      return _buildSkeleton();
+    }
+    
+    if (_hasError) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            _buildNotificationList(_getFilteredNotifications('all')),
-            _buildNotificationList(_getFilteredNotifications('orders')),
-            _buildNotificationList(_getFilteredNotifications('offers')),
-            _buildNotificationList(_getFilteredNotifications('system')),
+            Icon(Icons.error_outline_rounded, size: 64, color: Colors.red.shade300),
+            const SizedBox(height: 16),
+            const Text(
+              'عذراً، حدث خطأ أثناء جلب الإشعارات',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _fetchNotifications,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryGold,
+              ),
+              child: const Text('إعادة المحاولة'),
+            )
           ],
         ),
-      ),
+      );
+    }
+    
+    return TabBarView(
+      controller: _tabController,
+      children: [
+        _buildNotificationList(_getFilteredNotifications('all')),
+        _buildNotificationList(_getFilteredNotifications('orders')),
+        _buildNotificationList(_getFilteredNotifications('offers')),
+        _buildNotificationList(_getFilteredNotifications('system')),
+      ],
+    );
+  }
+  
+  Widget _buildSkeleton() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: 6,
+      itemBuilder: (context, index) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 46, height: 46,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(width: 150, height: 14, color: Colors.grey.shade200),
+                    const SizedBox(height: 10),
+                    Container(width: double.infinity, height: 12, color: Colors.grey.shade200),
+                    const SizedBox(height: 6),
+                    Container(width: 200, height: 12, color: Colors.grey.shade200),
+                    const SizedBox(height: 14),
+                    Container(width: 60, height: 10, color: Colors.grey.shade200),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -197,132 +335,135 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        final bool isRead = item['isRead'] ?? true;
+    return RefreshIndicator(
+      onRefresh: _fetchNotifications,
+      color: AppTheme.primaryGold,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          final bool isRead = item['isRead'] ?? true;
 
-        return Dismissible(
-          key: Key(item['id']),
-          background: Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            decoration: BoxDecoration(
-              color: Colors.red.shade400,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            alignment: Alignment.centerRight,
-            child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
-          ),
-          onDismissed: (direction) {
-            setState(() {
-              _allNotifications.removeWhere((element) => element['id'] == item['id']);
-            });
-          },
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: isRead ? Colors.white : AppTheme.primaryGold.withOpacity(0.06),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isRead ? Colors.grey.shade200 : AppTheme.primaryGold.withOpacity(0.4),
-                width: isRead ? 1 : 1.5,
+          return Dismissible(
+            key: Key(item['id']),
+            background: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.red.shade400,
+                borderRadius: BorderRadius.circular(18),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              alignment: Alignment.centerRight,
+              child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    color: (item['iconColor'] as Color).withOpacity(0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(item['icon'] as IconData, color: item['iconColor'] as Color, size: 24),
+            onDismissed: (direction) {
+              setState(() {
+                _allNotifications.removeWhere((element) => element['id'] == item['id']);
+              });
+              _deleteNotification(item);
+            },
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isRead ? Colors.white : AppTheme.primaryGold.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isRead ? Colors.grey.shade200 : AppTheme.primaryGold.withOpacity(0.4),
+                  width: isRead ? 1 : 1.5,
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              item['title'] as String,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                color: isRead ? AppTheme.darkNavy : Colors.black,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: (item['iconColor'] as Color).withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(item['icon'] as IconData, color: item['iconColor'] as Color, size: 24),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item['title'] as String,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  color: isRead ? AppTheme.darkNavy : Colors.black,
+                                ),
                               ),
                             ),
-                          ),
-                          if (!isRead)
-                            Container(
-                              width: 8,
-                              height: 8,
-                              margin: const EdgeInsets.only(right: 6),
-                              decoration: const BoxDecoration(
-                                color: AppTheme.primaryGold,
-                                shape: BoxShape.circle,
+                            if (!isRead)
+                              Container(
+                                width: 8,
+                                height: 8,
+                                margin: const EdgeInsets.only(right: 6),
+                                decoration: const BoxDecoration(
+                                  color: AppTheme.primaryGold,
+                                  shape: BoxShape.circle,
+                                ),
                               ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        item['body'] as String,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isRead ? Colors.grey.shade600 : Colors.grey.shade800,
-                          height: 1.4,
+                          ],
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            item['time'] as String,
-                            style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                        const SizedBox(height: 6),
+                        Text(
+                          item['body'] as String,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isRead ? Colors.grey.shade600 : Colors.grey.shade800,
+                            height: 1.4,
                           ),
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                item['isRead'] = true;
-                              });
-                            },
-                            child: const Text(
-                              'عرض التفاصيل ←',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppTheme.primaryGold,
-                                fontWeight: FontWeight.bold,
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              item['time'] as String,
+                              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                _markAsRead(item);
+                              },
+                              child: const Text(
+                                'عرض التفاصيل ←',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppTheme.primaryGold,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

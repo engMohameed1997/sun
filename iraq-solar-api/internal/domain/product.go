@@ -19,43 +19,59 @@ const (
 )
 
 type Product struct {
-	ID            uuid.UUID       `db:"id" json:"id"`
-	CategoryID    *int            `db:"category_id" json:"category_id,omitempty"`
-	SKU           string          `db:"sku" json:"sku"`
-	Name          string          `db:"name" json:"name"`
-	Brand         string          `db:"brand" json:"brand"`
-	Model         string          `db:"model" json:"model"`
-	Type          ProductType     `db:"type" json:"type"`
-	PriceUSD      float64         `db:"price_usd" json:"price_usd"`
-	StockQuantity int             `db:"stock_quantity" json:"stock_quantity"`
-	Specifications json.RawMessage `db:"specifications" json:"specifications"`
-	Images        []string        `db:"images" json:"images"`
-	IsAvailable   bool            `db:"is_available" json:"is_available"`
-	CreatedAt     time.Time       `db:"created_at" json:"created_at"`
-	UpdatedAt     time.Time       `db:"updated_at" json:"updated_at"`
+	ID                uuid.UUID       `db:"id" json:"id"`
+	CategoryID        *int            `db:"category_id" json:"category_id,omitempty"`
+	MerchantID        *uuid.UUID      `db:"merchant_id" json:"merchant_id,omitempty"`
+	SKU               string          `db:"sku" json:"sku"`
+	Name              string          `db:"name" json:"name"`
+	Brand             string          `db:"brand" json:"brand"`
+	Model             string          `db:"model" json:"model"`
+	Type              ProductType     `db:"type" json:"type"`
+	PriceUSD          float64         `db:"price_usd" json:"price_usd"`
+	StockQuantity     int             `db:"stock_quantity" json:"stock_quantity"`
+	ReservedQuantity  int             `db:"reserved_quantity" json:"reserved_quantity"`
+	LowStockThreshold int             `db:"low_stock_threshold" json:"low_stock_threshold"`
+	Specifications    json.RawMessage `db:"specifications" json:"specifications"`
+	Images            []string        `db:"images" json:"images"`
+	IsAvailable       bool            `db:"is_available" json:"is_available"`
+	CreatedAt         time.Time       `db:"created_at" json:"created_at"`
+	UpdatedAt         time.Time       `db:"updated_at" json:"updated_at"`
+	DeletedAt         *time.Time      `db:"deleted_at" json:"deleted_at,omitempty"`
+}
+
+func (p Product) AvailableQuantity() int {
+	avail := p.StockQuantity - p.ReservedQuantity
+	if avail < 0 {
+		return 0
+	}
+	return avail
 }
 
 type UpdateProductRequest struct {
-	CategoryID     *int            `json:"category_id"`
-	SKU            string          `json:"sku"`
-	Name           string          `json:"name"`
-	Brand          string          `json:"brand"`
-	Model          string          `json:"model"`
-	Type           ProductType     `json:"type"`
-	PriceUSD       float64         `json:"price_usd"`
-	StockQuantity  *int            `json:"stock_quantity"`
-	Specifications json.RawMessage `json:"specifications"`
-	IsAvailable    *bool           `json:"is_available"`
-	Images         []string        `json:"images"`
+	CategoryID        *int            `json:"category_id"`
+	SKU               string          `json:"sku"`
+	Name              string          `json:"name"`
+	Brand             string          `json:"brand"`
+	Model             string          `json:"model"`
+	Type              ProductType     `json:"type"`
+	PriceUSD          float64         `json:"price_usd"`
+	StockQuantity     *int            `json:"stock_quantity"`
+	LowStockThreshold *int            `json:"low_stock_threshold"`
+	Specifications    json.RawMessage `json:"specifications"`
+	IsAvailable       *bool           `json:"is_available"`
+	Images            []string        `json:"images"`
 }
 
 type CreateProductRequest struct {
-	SKU            string          `json:"sku" binding:"required"`
-	Name           string          `json:"name" binding:"required"`
-	Brand          string          `json:"brand" binding:"required"`
-	Model          string          `json:"model" binding:"required"`
-	Type           ProductType     `json:"type" binding:"required"`
-	PriceUSD       float64         `json:"price_usd" binding:"required,gt=0"`
-	StockQuantity  int             `json:"stock_quantity" binding:"gte=0"`
-	Specifications json.RawMessage `json:"specifications"`
+	CategoryID        *int            `json:"category_id"`
+	SKU               string          `json:"sku" binding:"required"`
+	Name              string          `json:"name" binding:"required"`
+	Brand             string          `json:"brand" binding:"required"`
+	Model             string          `json:"model" binding:"required"`
+	Type              ProductType     `json:"type" binding:"required"`
+	PriceUSD          float64         `json:"price_usd" binding:"required,gt=0"`
+	StockQuantity     int             `json:"stock_quantity" binding:"gte=0"`
+	LowStockThreshold int             `json:"low_stock_threshold"`
+	Specifications    json.RawMessage `json:"specifications"`
+	Images            []string        `json:"images"`
 }

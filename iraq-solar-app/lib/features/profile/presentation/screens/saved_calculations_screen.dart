@@ -10,32 +10,7 @@ class SavedCalculationsScreen extends StatefulWidget {
 }
 
 class _SavedCalculationsScreenState extends State<SavedCalculationsScreen> {
-  final List<Map<String, dynamic>> _calculations = [
-    {
-      'id': 'calc_1',
-      'title': 'تصميم منظومة منزلية 7.5 kW',
-      'date': '2026-07-25',
-      'details': '14 لوح 550W • انفيرتر هجين Deye 8kW • بطارية 10.2 kWh',
-      'costIQD': '18,500,000 د.ع',
-      'type': 'حاسبة المنظومة الشاملة',
-    },
-    {
-      'id': 'calc_2',
-      'title': 'دراسة التوفير واسترداد المال (ROI)',
-      'date': '2026-07-24',
-      'details': 'توفير شهري 225,000 د.ع • فترة استرداد 2.1 سنة • أرباح 10 سنوات: 22.5 مليون',
-      'costIQD': 'توفير 2.7 مليون سنوياً',
-      'type': 'حاسبة التوفير ROI',
-    },
-    {
-      'id': 'calc_3',
-      'title': 'حساب مقطع كابل DC الرئيسي',
-      'date': '2026-07-20',
-      'details': 'مقطع سلك موصى به: 25 mm² نحاس • هبوط جهد 1.2V (1.8%)',
-      'costIQD': 'فحص هندسي للموقع',
-      'type': 'Cable Sizing & VDrop',
-    },
-  ];
+  final List<Map<String, dynamic>> _calculations = [];
 
   void _deleteCalculation(int index) {
     final item = _calculations[index];

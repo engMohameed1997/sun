@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/cart_service.dart';
 import '../../../../core/widgets/app_toast.dart';
+import '../../../../core/widgets/product_image_widget.dart';
 import '../../../cart/presentation/screens/cart_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
@@ -20,9 +21,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final p = widget.product;
-    final priceUSD = (p['price_usd'] ?? 115.0) as num;
-    final totalPrice = priceUSD * _quantity;
-    final priceIQD = (totalPrice * 1530).toInt(); // Standard 1 USD ~ 1530 IQD
+    final priceIQDString = p['price'] ?? p['priceIQD'] ?? '175,000 د.ع';
+    final imagePath = p['image'] ?? p['assetImage'];
+    final specs = p['specs'] as Map<String, String>?;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -33,24 +34,46 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           backgroundColor: AppTheme.darkNavy,
         ),
         body: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Product Image Display Container
+              // Product High-Res Image Header Container
               Container(
                 width: double.infinity,
-                height: 240,
+                height: 280,
                 color: Colors.white,
-                child: Center(
-                  child: Icon(
-                    p['type'] == 'inverter'
-                        ? Icons.bolt_rounded
-                        : p['type'] == 'battery'
-                            ? Icons.battery_charging_full_rounded
-                            : Icons.solar_power_rounded,
-                    color: AppTheme.primaryGold,
-                    size: 110,
-                  ),
+                child: Stack(
+                  children: [
+                    ProductImageWidget(
+                      imagePath: imagePath as String?,
+                      type: p['type'] as String?,
+                      fit: BoxFit.cover,
+                    ),
+                    if (p['discountTag'] != null)
+                      Positioned(
+                        top: 16,
+                        right: 16,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent,
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.redAccent.withOpacity(0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            p['discountTag'] as String,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
 
@@ -64,42 +87,72 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                           decoration: BoxDecoration(
                             color: AppTheme.primaryGold.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
                           ),
                           child: Text(
                             p['brand'] ?? 'علامة تجارية معتمدة',
                             style: const TextStyle(color: AppTheme.secondaryGold, fontWeight: FontWeight.bold, fontSize: 12),
                           ),
                         ),
-                        const Row(
+                        Row(
                           children: [
-                            Icon(Icons.star_rounded, color: Colors.amber, size: 20),
-                            SizedBox(width: 4),
-                            Text('4.9 (42 تقييم)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            const Icon(Icons.star_rounded, color: Colors.amber, size: 20),
+                            const SizedBox(width: 4),
+                            Text(
+                              p['rating'] as String? ?? '4.9 ⭐',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.darkNavy),
+                            ),
                           ],
                         ),
                       ],
                     ),
 
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
 
                     // Title
                     Text(
-                      p['name'] ?? 'لوح طاقة شمسية high-efficiency',
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.darkNavy),
+                      p['name'] ?? 'منتج طاقة شمسية عالي الكفاءة',
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.darkNavy, height: 1.3),
                     ),
 
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
 
                     // Price Banner (IQD Only)
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
                       children: [
                         Text(
-                          '${(priceIQD).toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')} د.ع',
-                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.primaryGold),
+                          priceIQDString as String,
+                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.primaryGold),
+                        ),
+                        if (p['originalPriceIQD'] != null) ...[
+                          const SizedBox(width: 10),
+                          Text(
+                            p['originalPriceIQD'] as String,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade400,
+                              decoration: TextDecoration.lineThrough,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // Stock availability badge
+                    Row(
+                      children: [
+                        const Icon(Icons.check_circle_rounded, color: Colors.green, size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          'متوفر بالمخزن (${p['stock'] ?? 50} قطعة) • توصيل وفحص خلال 24 ساعة',
+                          style: const TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -107,12 +160,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     const Divider(height: 32),
 
                     // Specifications Breakdown
-                    const Text('المواصفات الفنية والهندسية:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.darkNavy)),
+                    const Text('📐 المواصفات الفنية والهندسية:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.darkNavy)),
                     const SizedBox(height: 12),
-                    _buildSpecRow('الضمان المصنعي:', p['warranty'] ?? '25 سنة ضمان كفاءة الأداء'),
-                    _buildSpecRow('التقنية:', 'N-Type TOPCon Tier-1'),
-                    _buildSpecRow('الكفاءة:', '21.5% High Efficiency'),
-                    _buildSpecRow('حالة التوفر:', 'متوفر في مستودع المتجر (${p['stock'] ?? 150} قطعة)'),
+
+                    if (specs != null && specs.isNotEmpty)
+                      ...specs.entries.map((entry) => _buildSpecRow(entry.key, entry.value)).toList()
+                    else ...[
+                      _buildSpecRow('الضمان المصنعي:', p['warranty'] ?? '25 سنة كفالة كفاءة وتوليد'),
+                      _buildSpecRow('درجة الحماية:', 'IP68 waterproof مضاد للأتربة والأمطار'),
+                      _buildSpecRow('حالة التوفر:', 'متوفر في مستودع المتجر الرئيسي'),
+                    ],
 
                     const Divider(height: 32),
 
@@ -121,28 +178,49 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: Colors.grey.shade200),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
+                        ],
                       ),
                       child: Row(
                         children: [
                           const CircleAvatar(
+                            radius: 22,
                             backgroundColor: AppTheme.darkNavy,
-                            child: Icon(Icons.storefront_rounded, color: AppTheme.primaryGold),
+                            child: Icon(Icons.storefront_rounded, color: AppTheme.primaryGold, size: 24),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(p['brand'] ?? 'متجر بغداد للطاقة الشمسية', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                Text('مورد معتمد في العراق • الكرادة', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                                Row(
+                                  children: [
+                                    Text(p['store'] as String? ?? 'متجر بغداد للطاقة الشمولية', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.darkNavy)),
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.verified_rounded, color: Colors.blue, size: 16),
+                                    const SizedBox(width: 2),
+                                    const Text('متجر موثّق', style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text('مورد معتمد في العراق • شحن لجميع المحافظات', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
                               ],
                             ),
                           ),
-                          OutlinedButton(
-                            onPressed: () {},
-                            child: const Text('تواصل', style: TextStyle(color: AppTheme.darkNavy)),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              AppNotification.showSuccess(context, 'جاري الاتصال بـ ${p['store']} عبر الواتساب...');
+                            },
+                            icon: const Icon(Icons.chat_rounded, size: 16),
+                            label: const Text('واتساب', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF25D366),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
                           ),
                         ],
                       ),
@@ -157,20 +235,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         Container(
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(16),
                             border: Border.all(color: Colors.grey.shade300),
                           ),
                           child: Row(
                             children: [
                               IconButton(
-                                icon: const Icon(Icons.remove),
+                                icon: const Icon(Icons.remove, size: 18),
                                 onPressed: () {
                                   if (_quantity > 1) setState(() => _quantity--);
                                 },
                               ),
                               Text('$_quantity', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                               IconButton(
-                                icon: const Icon(Icons.add),
+                                icon: const Icon(Icons.add, size: 18),
                                 onPressed: () => setState(() => _quantity++),
                               ),
                             ],
@@ -192,11 +270,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                   );
                                 } else {
                                   // Add to cart & toggle state
+                                  final priceRaw = p['price_iqd'] ?? 175000;
                                   CartService.instance.addItem(
-                                    id: p['name'] ?? 'product_item',
+                                    id: p['id'] ?? p['name'],
                                     title: p['name'] ?? 'منتج شمسي',
-                                    storeName: p['brand'] ?? 'متجر طاقة معتمد',
-                                    priceIQD: priceIQD ~/ _quantity,
+                                    storeName: p['store'] ?? 'متجر طاقة معتمد',
+                                    priceIQD: priceRaw is int ? priceRaw : 175000,
                                     qty: _quantity,
                                   );
 
@@ -214,6 +293,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                 backgroundColor: _isAddedToCart ? AppTheme.darkNavy : AppTheme.primaryGold,
                                 foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                elevation: 3,
                               ),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
@@ -244,12 +324,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   Widget _buildSpecRow(String label, String val) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-          Text(val, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.darkNavy)),
-        ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+            Text(val, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.darkNavy)),
+          ],
+        ),
       ),
     );
   }

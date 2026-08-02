@@ -8,6 +8,8 @@ import '../widgets/banner_carousel.dart';
 import '../../../merchant/presentation/screens/store_detail_screen.dart';
 import '../../../products/presentation/screens/product_detail_screen.dart';
 import '../../../products/presentation/screens/promotions_catalog_screen.dart';
+import '../../../../core/data/mock_products_repository.dart';
+import '../../../../core/widgets/product_image_widget.dart';
 
 class SuperQiHomeScreen extends StatefulWidget {
   final Function(int tabIndex)? onNavigateTab;
@@ -20,119 +22,94 @@ class SuperQiHomeScreen extends StatefulWidget {
 
 class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
   final ScrollController _storesScrollController = ScrollController();
+  List<Map<String, dynamic>> _storesList = [];
+  List<Map<String, dynamic>> _productsList = [];
+  List<Map<String, dynamic>> _installersList = [];
+  bool _isLoadingData = true;
 
-  final List<Map<String, dynamic>> _storesList = [
-    {
-      'id': 's1',
-      'name': 'بغداد للطاقة',
-      'fullName': 'متجر بغداد للطاقة الشمولية',
-      'rating': '4.9 ⭐',
-      'city': 'بغداد - الكرادة',
-      'verified': true,
-      'phone': '07701234567',
-      'icon': Icons.wb_sunny_rounded,
-      'color': const Color(0xFFF59E0B),
-    },
-    {
-      'id': 's2',
-      'name': 'دجلة الهجينة',
-      'fullName': 'دجلة للحلول الشمسية الهجينة',
-      'rating': '4.8 ⭐',
-      'city': 'أربيل - العرصات',
-      'verified': true,
-      'phone': '07509876543',
-      'icon': Icons.bolt_rounded,
-      'color': const Color(0xFF3B82F6),
-    },
-    {
-      'id': 's3',
-      'name': 'البصرة سولار',
-      'fullName': 'البصرة سولار تك المعتمد',
-      'rating': '4.9 ⭐',
-      'city': 'البصرة - الجزائر',
-      'verified': true,
-      'phone': '07801122334',
-      'icon': Icons.solar_power_rounded,
-      'color': const Color(0xFF10B981),
-    },
-    {
-      'id': 's4',
-      'name': 'النجف تك',
-      'fullName': 'النجف تكنولوجي للطاقة النظيفة',
-      'rating': '4.7 ⭐',
-      'city': 'النجف الأشرف - السنتر',
-      'verified': true,
-      'phone': '07715544332',
-      'icon': Icons.electric_car_rounded,
-      'color': const Color(0xFF8B5CF6),
-    },
-    {
-      'id': 's5',
-      'name': 'كربلاء جروب',
-      'fullName': 'كربلاء سولار جروب المعتمد',
-      'rating': '4.9 ⭐',
-      'city': 'كربلاء المقدسة - الجمعية',
-      'verified': true,
-      'phone': '07812233445',
-      'icon': Icons.energy_savings_leaf_rounded,
-      'color': const Color(0xFFEC4899),
-    },
-    {
-      'id': 's6',
-      'name': 'النور النظيفة',
-      'fullName': 'النور للطاقة الشمسية النظيفة',
-      'rating': '4.8 ⭐',
-      'city': 'نينوى (الموصل) - المجموعة',
-      'verified': true,
-      'phone': '07723344556',
-      'icon': Icons.lightbulb_rounded,
-      'color': const Color(0xFFF97316),
-    },
-    {
-      'id': 's7',
-      'name': 'الفرات هجين',
-      'fullName': 'الفرات للحلول الشمسية الهجينة',
-      'rating': '4.7 ⭐',
-      'city': 'بابل (الحلة) - الشارع العام',
-      'verified': true,
-      'phone': '07823344556',
-      'icon': Icons.power_rounded,
-      'color': const Color(0xFF06B6D4),
-    },
-    {
-      'id': 's8',
-      'name': 'سومر سولار',
-      'fullName': 'سومر لحلول الطاقة الشمسية',
-      'rating': '4.8 ⭐',
-      'city': 'ذي قار (الناصرية) - الحبوبي',
-      'verified': true,
-      'phone': '07834455667',
-      'icon': Icons.offline_bolt_rounded,
-      'color': const Color(0xFF6366F1),
-    },
-    {
-      'id': 's9',
-      'name': 'بابا گرگر',
-      'fullName': 'بابا گرگر للطاقة النظيفة',
-      'rating': '4.9 ⭐',
-      'city': 'كركوك - شارع المحافظة',
-      'verified': true,
-      'phone': '07734455667',
-      'icon': Icons.shield_moon_rounded,
-      'color': const Color(0xFF14B8A6),
-    },
-    {
-      'id': 's10',
-      'name': 'كوردستان انيرجي',
-      'fullName': 'كوردستان للحلول الشمسية المتطورة',
-      'rating': '4.9 ⭐',
-      'city': 'السليمانية - سليم كندي',
-      'verified': true,
-      'phone': '07512233445',
-      'icon': Icons.landscape_rounded,
-      'color': const Color(0xFF84CC16),
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _fetchLiveData();
+  }
+
+  Future<void> _fetchLiveData() async {
+    final productsRes = await ApiClient.getProducts();
+    final storesRes = await ApiClient.getStores();
+    final installersRes = await ApiClient.getInstallers(perPage: 10);
+
+    if (mounted) {
+      setState(() {
+        if (productsRes['data'] != null && productsRes['data'] is List) {
+          final list = productsRes['data'] as List;
+          _productsList = list.map((item) {
+            final m = item as Map<String, dynamic>;
+            final priceUsd = (m['price_usd'] ?? 0.0).toDouble();
+            final priceRaw = (priceUsd * 1500).toInt();
+            return {
+              'id': m['id']?.toString() ?? '',
+              'name': m['name'] ?? '',
+              'brand': m['brand'] ?? 'ماركة معتمدة',
+              'store': 'متجر معتمد',
+              'category': m['category_id'] ?? 'منظومات شمسية',
+              'price': '${priceRaw.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match match) => '${match[1]},')} د.ع',
+              'priceIQD': '${priceRaw.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match match) => '${match[1]},')} د.ع',
+              'price_iqd': priceRaw,
+              'price_usd': priceUsd,
+              'image': 'assets/images/solar_panel_longi.jpg',
+              'rating': '4.9 ⭐',
+              'warranty': '25 سنة كفالة',
+              'stock': m['stock_quantity'] ?? 50,
+              'type': m['type'] ?? 'panel',
+              'specs': m['specifications'] ?? {},
+              'isFeatured': true,
+            };
+          }).toList();
+        }
+
+        if (storesRes['data'] != null && storesRes['data'] is List) {
+          final stores = storesRes['data'] as List;
+          _storesList = stores.map((s) {
+            final sm = s as Map<String, dynamic>;
+            return {
+              'id': sm['id']?.toString() ?? '',
+              'name': sm['full_name'] ?? 'متجر طاقة متكامل',
+              'fullName': sm['full_name'] ?? 'متجر طاقة شمسية معتمد في العراق',
+              'rating': '4.9 ⭐',
+              'city': '${sm['governorate'] ?? 'بغداد'} - ${sm['city'] ?? 'المركز'}',
+              'verified': sm['is_verified'] ?? true,
+              'phone': sm['phone'] ?? '07700000000',
+              'icon': Icons.wb_sunny_rounded,
+              'color': const Color(0xFFF59E0B),
+            };
+          }).toList();
+        }
+
+        if (installersRes['data'] != null && installersRes['data'] is List) {
+          final installers = installersRes['data'] as List;
+          _installersList = installers.map((i) {
+            final im = i as Map<String, dynamic>;
+            final gov = im['governorate'] ?? '';
+            final city = im['city'] ?? '';
+            final location = city.isNotEmpty ? '$gov - $city' : gov;
+            final role = im['role'] ?? 'installer';
+            final roleLabel = role == 'engineer' ? 'مهندس طاقة شمسية' : 'فني تركيب منظومات';
+            return {
+              'id': im['id']?.toString() ?? '',
+              'name': im['full_name'] ?? 'فني معتمد',
+              'location': location.isNotEmpty ? location : 'العراق',
+              'installs': roleLabel,
+              'phone': im['phone'] ?? '',
+              'is_verified': im['is_verified'] ?? false,
+              'raw': im,
+            };
+          }).toList();
+        }
+
+        _isLoadingData = false;
+      });
+    }
+  }
 
   void _scrollStoresLeft() {
     if (_storesScrollController.hasClients) {
@@ -154,45 +131,6 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
     }
   }
 
-  final List<Map<String, dynamic>> _productsList = [
-    {
-      'id': 'p1',
-      'name': 'LONGi 550W N-Type TOPCon',
-      'store': 'متجر بغداد للطاقة',
-      'price': '175,000 د.ع',
-      'price_iqd': 175000,
-      'brand': 'LONGi Solar',
-      'type': 'panel',
-    },
-    {
-      'id': 'p2',
-      'name': 'انفيرتر Deye 8kW Hybrid',
-      'store': 'دجلة للحلول الشمسية',
-      'price': '1,875,000 د.ع',
-      'price_iqd': 1875000,
-      'brand': 'Deye',
-      'type': 'inverter',
-    },
-    {
-      'id': 'p3',
-      'name': 'بطارية Felicity 10.2kWh LiFePO4',
-      'store': 'البصرة سولار تك',
-      'price': '2,175,000 د.ع',
-      'price_iqd': 2175000,
-      'brand': 'Felicity',
-      'type': 'battery',
-    },
-    {
-      'id': 'p4',
-      'name': 'هيكل تثبيت ألمنيوم 4 ألواح',
-      'store': 'متجر بغداد للطاقة',
-      'price': '130,000 د.ع',
-      'price_iqd': 130000,
-      'brand': 'Solar Structure',
-      'type': 'structure',
-    },
-  ];
-
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -206,7 +144,7 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
               // 1. Header with Notifications Bell & Search Bar
               _buildSuperQiHeader(),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
               // 2. Interactive Auto-sliding Banner Carousel (بنرات الشاشة الرئيسية)
               BannerCarouselWidget(
@@ -214,11 +152,6 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
                   widget.onNavigateTab?.call(targetIndex);
                 },
               ),
-
-              const SizedBox(height: 20),
-
-              // 3. Quick Actions Grid (حاسبة، متاجر، فنيين، عروض)
-              _buildSuperQiQuickActionsGrid(),
 
               const SizedBox(height: 24),
 
@@ -229,8 +162,8 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
 
               // 5. Verified Technicians & Installers (فنيين ومهندسين)
               _buildSectionTitle(
-                '👨‍🔧 فنيين ومهندسين معتمدين بالفحص والتركيب',
-                onSeeAll: () => widget.onNavigateTab?.call(3),
+                '👨‍🔧 فنيين ومهندسين   ',
+                onSeeAll: () => widget.onNavigateTab?.call(4),
               ),
               const SizedBox(height: 12),
               _buildVerifiedInstallersList(),
@@ -245,7 +178,7 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
               // 7. Featured Solar Components & Products (الألواح والانفيرترات بالدينار)
               _buildSectionTitle(
                 'أحدث الألواح والانفيرترات والبطاريات',
-                onSeeAll: () => widget.onNavigateTab?.call(2),
+                onSeeAll: () => widget.onNavigateTab?.call(3),
               ),
               const SizedBox(height: 12),
               _buildProductsGrid(),
@@ -294,10 +227,6 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
                       Text(
                         'أهلاً بك 👋',
                         style: TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                      Text(
-                        'منصة العراق للطاقة الشمسية',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                     ],
                   ),
@@ -389,84 +318,7 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
     );
   }
 
-  // --- Quick Actions Grid ---
-  Widget _buildSuperQiQuickActionsGrid() {
-    final actions = [
-      {
-        'title': 'حاسبة الأحمال',
-        'icon': Icons.calculate_rounded,
-        'color': AppTheme.primaryGold,
-        'action': () => widget.onNavigateTab?.call(1),
-      },
-      {
-        'title': 'المتاجر',
-        'icon': Icons.storefront_rounded,
-        'color': AppTheme.darkNavy,
-        'action': () => widget.onNavigateTab?.call(2),
-      },
-      {
-        'title': 'دليل الفنيين',
-        'icon': Icons.engineering_rounded,
-        'color': AppTheme.accentGreen,
-        'action': () => widget.onNavigateTab?.call(3),
-      },
-      {
-        'title': 'العروض والخصومات',
-        'icon': Icons.local_offer_rounded,
-        'color': const Color(0xFFEC4899),
-        'action': () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const PromotionsCatalogScreen()),
-          );
-        },
-      },
-    ];
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 15,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: actions.map((act) {
-            return GestureDetector(
-              onTap: act['action'] as VoidCallback,
-              child: Column(
-                children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: (act['color'] as Color).withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Icon(act['icon'] as IconData, color: act['color'] as Color, size: 28),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    act['title'] as String,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: AppTheme.darkNavy),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
 
   // --- Calculator Banner Card ---
   Widget _buildCalculatorBannerCard() {
@@ -514,7 +366,7 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
             const SizedBox(width: 12),
             ElevatedButton(
               onPressed: () {
-                widget.onNavigateTab?.call(1);
+                widget.onNavigateTab?.call(2);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.darkNavy,
@@ -545,21 +397,15 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
               const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '🏪 أبرز المتاجر الرئيسية المعتمدة في العراق',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.darkNavy),
-                  ),
+           
                   SizedBox(height: 2),
-                  Text(
-                    '4 متاجر بالشاشة (10 متاجر معتمدة بالكامل)',
-                    style: TextStyle(fontSize: 11, color: Colors.grey),
-                  ),
+       
                 ],
               ),
               Row(
                 children: [
                   TextButton(
-                    onPressed: () => widget.onNavigateTab?.call(2),
+                    onPressed: () => widget.onNavigateTab?.call(3),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       minimumSize: Size.zero,
@@ -575,40 +421,6 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
                         SizedBox(width: 2),
                         Icon(Icons.arrow_back_ios_new_rounded, size: 12, color: AppTheme.primaryGold),
                       ],
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Container(
-                    height: 34,
-                    width: 34,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 6, offset: const Offset(0, 2)),
-                      ],
-                    ),
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      icon: const Icon(Icons.arrow_forward_ios_rounded, size: 15, color: AppTheme.darkNavy),
-                      onPressed: _scrollStoresRight,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Container(
-                    height: 34,
-                    width: 34,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 6, offset: const Offset(0, 2)),
-                      ],
-                    ),
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      icon: const Icon(Icons.arrow_back_ios_rounded, size: 15, color: AppTheme.darkNavy),
-                      onPressed: _scrollStoresLeft,
                     ),
                   ),
                 ],
@@ -632,7 +444,7 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
                 // 11th Card at End of List: "عرض كل المتاجر"
                 return GestureDetector(
                   onTap: () {
-                    widget.onNavigateTab?.call(2);
+                    widget.onNavigateTab?.call(3);
                   },
                   child: Container(
                     width: 86,
@@ -766,6 +578,9 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
   }
 
   Widget _buildProductTile(Map<String, dynamic> product) {
+    final imagePath = product['image'] as String?;
+    final discountTag = product['discountTag'] as String?;
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -783,24 +598,52 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
             BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
           ],
         ),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.backgroundLight,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Center(
-                  child: Icon(Icons.solar_power_rounded, color: AppTheme.primaryGold, size: 44),
-                ),
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: ProductImageWidget(
+                      imagePath: imagePath,
+                      type: product['type'] as String?,
+                    ),
+                  ),
+                  if (discountTag != null)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          discountTag,
+                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(height: 8),
-            Text(product['name'] as String, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.darkNavy), maxLines: 1),
-            Text(product['store'] as String, style: TextStyle(fontSize: 10, color: Colors.grey.shade500), maxLines: 1),
+            Text(
+              product['name'] as String,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.darkNavy),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              product['store'] as String,
+              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             const SizedBox(height: 6),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -824,20 +667,26 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
 
   // --- Verified Installers ---
   Widget _buildVerifiedInstallersList() {
-    final installers = [
-      {'name': 'م. كرار العبيدي', 'location': 'بغداد - الكرادة', 'installs': '120 منظومة فحص وحساب', 'phone': '07709988776'},
-      {'name': 'فني صفا الناصري', 'location': 'البصرة - الجزائر', 'installs': '85 منظومة هجينة', 'phone': '07804455667'},
-      {'name': 'م. أحمد الساعدي', 'location': 'أربيل - عينكاوة', 'installs': '150 منظومة صناعية', 'phone': '07503322114'},
-    ];
+    if (_installersList.isEmpty) {
+      return SizedBox(
+        height: 95,
+        child: Center(
+          child: Text(
+            'لا يوجد فنيين معتمدين حالياً',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+          ),
+        ),
+      );
+    }
 
     return SizedBox(
       height: 95,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        itemCount: installers.length,
+        itemCount: _installersList.length,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         itemBuilder: (context, index) {
-          final inst = installers[index];
+          final inst = _installersList[index];
           return GestureDetector(
             onTap: () {
               AppNotification.showInfo(
@@ -869,9 +718,9 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(inst['name']!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.darkNavy), maxLines: 1),
-                        Text(inst['location']!, style: TextStyle(fontSize: 10, color: Colors.grey.shade500), maxLines: 1),
-                        Text(inst['installs']!, style: const TextStyle(fontSize: 10, color: AppTheme.primaryGold, fontWeight: FontWeight.bold), maxLines: 1),
+                        Text(inst['name'] as String, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.darkNavy), maxLines: 1),
+                        Text(inst['location'] as String, style: TextStyle(fontSize: 10, color: Colors.grey.shade500), maxLines: 1),
+                        Text(inst['installs'] as String, style: const TextStyle(fontSize: 10, color: AppTheme.primaryGold, fontWeight: FontWeight.bold), maxLines: 1),
                       ],
                     ),
                   ),

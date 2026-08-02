@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_theme.dart';
 import 'installer_detail_screen.dart';
 
@@ -14,97 +15,61 @@ class _SolarInstallersScreenState extends State<SolarInstallersScreen> {
   String _searchQuery = '';
   String _selectedGov = 'الكل';
 
+  List<Map<String, dynamic>> _installers = [];
+  bool _isLoading = true;
+  bool _hasError = false;
+  String _errorMessage = '';
+
   final List<String> _governorates = [
-    'الكل',
-    'بغداد',
-    'البصرة',
-    'أربيل',
-    'النجف الأشرف',
-    'نينوى (الموصل)',
-    'كركوك',
-    'ذي قار',
+    'الكل', 'بغداد', 'البصرة', 'أربيل', 'النجف الأشرف',
+    'نينوى (الموصل)', 'كركوك', 'ذي قار',
   ];
 
-  final List<Map<String, dynamic>> _allInstallers = [
-    {
-      'id': 'inst1',
-      'name': 'م. كرار العبيدي',
-      'role': 'مهندس استشاري ومعاين طاقة شمسية',
-      'governorate': 'بغداد - الكرادة',
-      'govKey': 'بغداد',
-      'installs': '145 منظومة فحص وتثبيت',
-      'rating': '4.9 ⭐',
-      'reviews': '58 تقييم',
-      'verified': true,
-      'phone': '07701234567',
-      'experience': '8 سنوات خبرة ميدانية',
-      'projects': [
-        {'title': 'تركيب منظومة 12kW هجينة', 'location': 'بغداد - الكرادة', 'specs': '16 لوح LONGi + بطارية 10kWh'},
-        {'title': 'فحص محطة 25kW صناعية', 'location': 'بغداد - شارع فلسطين', 'specs': 'انفيرتر Deye ثلاثي الأطوار'},
-        {'title': 'منظومة 8kW مضخة زراعية', 'location': 'بغداد - أبو غريب', 'specs': 'تشغيل مباشر عالي الكفاءة'},
-      ],
-    },
-    {
-      'id': 'inst2',
-      'name': 'فني صفا الناصري',
-      'role': 'فني فحص وتركيب بطاريات ليثيوم',
-      'governorate': 'البصرة - حي الجزائر',
-      'govKey': 'البصرة',
-      'installs': '98 منظومة هجينة',
-      'rating': '4.8 ⭐',
-      'reviews': '42 تقييم',
-      'verified': true,
-      'phone': '07809876543',
-      'experience': '6 سنوات خبرة',
-      'projects': [
-        {'title': 'تركيب بطاريات 20kWh', 'location': 'البصرة - الجزائر', 'specs': 'بطاريات Felicity LiFePO4'},
-        {'title': 'منظومة 15kW صناعية', 'location': 'البصرة - الزبير', 'specs': 'تجهيز مع قواطع حماية صواعل'},
-      ],
-    },
-    {
-      'id': 'inst3',
-      'name': 'م. أحمد الخفاجي',
-      'role': 'استشاري محطات وأنظمة طاقة شمسية',
-      'governorate': 'أربيل - شارع العرصات',
-      'govKey': 'أربيل',
-      'installs': '210 منظومة شمسية',
-      'rating': '5.0 ⭐',
-      'reviews': '84 تقييم',
-      'verified': true,
-      'phone': '07501122334',
-      'experience': '10 سنوات خبرة',
-      'projects': [
-        {'title': 'محطة شمسية 50kW', 'location': 'أربيل - عينكاوة', 'specs': 'محطة تجارية كاملة'},
-        {'title': 'منظومة 10kW كاملة', 'location': 'أربيل - العرصات', 'specs': 'أنظمة هجينة مستقلة'},
-      ],
-    },
-    {
-      'id': 'inst4',
-      'name': 'م. حيدر الحسني',
-      'role': 'مهندس كهربائي وفني أمان شمسي',
-      'governorate': 'النجف الأشرف - حي الحنانة',
-      'govKey': 'النجف الأشرف',
-      'installs': '112 منظومة معتمدة',
-      'rating': '4.9 ⭐',
-      'reviews': '39 تقييم',
-      'verified': true,
-      'phone': '07714455667',
-      'experience': '7 سنوات خبرة',
-      'projects': [
-        {'title': 'منظومة 10kW ثلاثية الأطوار', 'location': 'النجف - شارع السنتر', 'specs': 'حماية وتأريض كامل'},
-      ],
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadInstallers();
+  }
 
-  List<Map<String, dynamic>> get _filteredInstallers {
-    return _allInstallers.where((inst) {
-      final matchesGov = _selectedGov == 'الكل' || inst['govKey'] == _selectedGov;
-      final matchesQuery = _searchQuery.isEmpty ||
-          (inst['name'] as String).toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          (inst['governorate'] as String).toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          (inst['role'] as String).toLowerCase().contains(_searchQuery.toLowerCase());
-      return matchesGov && matchesQuery;
-    }).toList();
+  Future<void> _loadInstallers() async {
+    setState(() { _isLoading = true; _hasError = false; });
+    try {
+      final res = await ApiClient.getInstallers(
+        governorate: _selectedGov == 'الكل' ? null : _selectedGov,
+        search: _searchQuery.isEmpty ? null : _searchQuery,
+      );
+      if (res['success'] == true && res['data'] != null) {
+        final data = res['data'];
+        final list = data['installers'];
+        if (list is List) {
+          setState(() {
+            _installers = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+            _isLoading = false;
+          });
+          return;
+        }
+      }
+      setState(() {
+        _installers = [];
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'فشل الاتصال بالسيرفر';
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _onSearchChanged(String val) {
+    setState(() => _searchQuery = val);
+    _loadInstallers();
+  }
+
+  void _onGovChanged(String gov) {
+    setState(() => _selectedGov = gov);
+    _loadInstallers();
   }
 
   void _navigateToInstallerDetail(Map<String, dynamic> installer) {
@@ -134,7 +99,6 @@ class _SolarInstallersScreenState extends State<SolarInstallersScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: Column(
                 children: [
-                  // Search Field
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -142,7 +106,7 @@ class _SolarInstallersScreenState extends State<SolarInstallersScreen> {
                     ),
                     child: TextField(
                       controller: _searchController,
-                      onChanged: (val) => setState(() => _searchQuery = val),
+                      onChanged: _onSearchChanged,
                       decoration: InputDecoration(
                         hintText: 'ابحث عن اسم المهندس، التخصص، أو المحافظة...',
                         hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 12),
@@ -152,7 +116,7 @@ class _SolarInstallersScreenState extends State<SolarInstallersScreen> {
                                 icon: const Icon(Icons.clear_rounded, color: Colors.grey, size: 18),
                                 onPressed: () {
                                   _searchController.clear();
-                                  setState(() => _searchQuery = '');
+                                  _onSearchChanged('');
                                 },
                               )
                             : null,
@@ -162,10 +126,7 @@ class _SolarInstallersScreenState extends State<SolarInstallersScreen> {
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 12),
-
-                  // Governorate Filter Horizontal List
                   SizedBox(
                     height: 38,
                     child: ListView.builder(
@@ -175,7 +136,7 @@ class _SolarInstallersScreenState extends State<SolarInstallersScreen> {
                         final gov = _governorates[index];
                         final isSelected = _selectedGov == gov;
                         return GestureDetector(
-                          onTap: () => setState(() => _selectedGov = gov),
+                          onTap: () => _onGovChanged(gov),
                           child: Container(
                             margin: const EdgeInsets.symmetric(horizontal: 4),
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -202,30 +163,25 @@ class _SolarInstallersScreenState extends State<SolarInstallersScreen> {
               ),
             ),
 
-            // Installers Directory List
+            // Content Area
             Expanded(
-              child: _filteredInstallers.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.person_search_rounded, size: 56, color: Colors.grey.shade400),
-                          const SizedBox(height: 10),
-                          Text(
-                            'لا يوجد فنيين طاقة شمسية ينطبق عليهم البحث في $_selectedGov',
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 13, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _filteredInstallers.length,
-                      itemBuilder: (context, index) {
-                        final installer = _filteredInstallers[index];
-                        return _buildInstallerCard(installer);
-                      },
-                    ),
+              child: _isLoading
+                  ? _buildLoadingSkeleton()
+                  : _hasError
+                      ? _buildErrorState()
+                      : _installers.isEmpty
+                          ? _buildEmptyState()
+                          : RefreshIndicator(
+                              onRefresh: _loadInstallers,
+                              color: AppTheme.primaryGold,
+                              child: ListView.builder(
+                                padding: const EdgeInsets.all(16),
+                                itemCount: _installers.length,
+                                itemBuilder: (context, index) {
+                                  return _buildInstallerCard(_installers[index]);
+                                },
+                              ),
+                            ),
             ),
           ],
         ),
@@ -233,7 +189,91 @@ class _SolarInstallersScreenState extends State<SolarInstallersScreen> {
     );
   }
 
+  Widget _buildLoadingSkeleton() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: 4,
+      itemBuilder: (context, index) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 58, height: 58,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade200,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(height: 14, width: 140, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(8))),
+                    const SizedBox(height: 8),
+                    Container(height: 10, width: 200, decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6))),
+                    const SizedBox(height: 8),
+                    Container(height: 10, width: 160, decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6))),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.cloud_off_rounded, size: 56, color: Colors.grey.shade400),
+          const SizedBox(height: 10),
+          Text(_errorMessage, style: TextStyle(color: Colors.grey.shade600, fontSize: 13, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: _loadInstallers,
+            icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+            label: const Text('إعادة المحاولة', style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.darkNavy, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.person_search_rounded, size: 56, color: Colors.grey.shade400),
+          const SizedBox(height: 10),
+          Text(
+            'لا يوجد فنيين طاقة شمسية في $_selectedGov حالياً',
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 13, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildInstallerCard(Map<String, dynamic> installer) {
+    final name = installer['full_name'] ?? 'فني';
+    final role = installer['role'] == 'engineer' ? 'مهندس طاقة شمسية معتمد' : 'فني تركيب منظومات شمسية';
+    final gov = installer['governorate'] ?? '';
+    final city = installer['city'] ?? '';
+    final location = city.isNotEmpty ? '$gov - $city' : gov;
+    final isVerified = installer['is_verified'] == true;
+
     return GestureDetector(
       onTap: () => _navigateToInstallerDetail(installer),
       child: Container(
@@ -248,8 +288,7 @@ class _SolarInstallersScreenState extends State<SolarInstallersScreen> {
         child: Row(
           children: [
             Container(
-              width: 58,
-              height: 58,
+              width: 58, height: 58,
               decoration: BoxDecoration(
                 color: AppTheme.darkNavy,
                 borderRadius: BorderRadius.circular(20),
@@ -266,44 +305,30 @@ class _SolarInstallersScreenState extends State<SolarInstallersScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: Text(
-                          installer['name'] as String,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.darkNavy),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.darkNavy), maxLines: 1, overflow: TextOverflow.ellipsis),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppTheme.accentGreen.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(10),
+                      if (isVerified)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(color: AppTheme.accentGreen.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+                          child: const Text('معتمد 🛡️', style: TextStyle(color: AppTheme.accentGreen, fontSize: 10, fontWeight: FontWeight.bold)),
                         ),
-                        child: const Text('معتمد 🛡️', style: TextStyle(color: AppTheme.accentGreen, fontSize: 10, fontWeight: FontWeight.bold)),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(installer['role'] as String, style: const TextStyle(fontSize: 11, color: AppTheme.primaryGold, fontWeight: FontWeight.bold)),
+                  Text(role, style: const TextStyle(fontSize: 11, color: AppTheme.primaryGold, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Row(
                     children: [
                       const Icon(Icons.location_on_rounded, color: Colors.grey, size: 14),
                       const SizedBox(width: 2),
-                      Text(installer['governorate'] as String, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                      const SizedBox(width: 10),
-                      const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
-                      const SizedBox(width: 2),
-                      Text(installer['rating'] as String, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      Expanded(child: Text(location, style: TextStyle(fontSize: 11, color: Colors.grey.shade600), maxLines: 1, overflow: TextOverflow.ellipsis)),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(installer['installs'] as String, style: const TextStyle(fontSize: 11, color: AppTheme.darkNavy, fontWeight: FontWeight.bold)),
-                      const Text('معاينة البروفايل والأعمال ←', style: TextStyle(color: AppTheme.primaryGold, fontWeight: FontWeight.bold, fontSize: 11)),
-                    ],
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('معاينة البروفايل والأعمال ←', style: TextStyle(color: AppTheme.primaryGold, fontWeight: FontWeight.bold, fontSize: 11)),
                   ),
                 ],
               ),

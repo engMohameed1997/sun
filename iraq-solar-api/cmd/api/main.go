@@ -54,6 +54,7 @@ func main() {
 	authService := service.NewAuthService(cfg.JWTSecret, userRepo)
 	calcService := service.NewSolarCalculatorService(calcRepo)
 	orderService := service.NewOrderService(orderRepo, productRepo)
+	orderService.StartPendingOrdersCleanupCron(context.Background(), 15*time.Minute, 24)
 	adminService := service.NewAdminService(adminRepo, governorateRepo, bannerRepo, notificationRepo)
 	notificationService := service.NewNotificationService(notificationRepo)
 
@@ -72,6 +73,9 @@ func main() {
 	adminHandler := handler.NewAdminHandler(adminService)
 	uploadHandler := handler.NewUploadHandler(minioService)
 	wsHandler := handler.NewWebSocketHandler(notificationService)
+	notifHandler := handler.NewNotificationHandler(notificationRepo)
+	installerHandler := handler.NewInstallerHandler(userRepo)
+	profileHandler := handler.NewProfileHandler(userRepo)
 
 	// 6. Setup Gin Router & Global Security Middlewares
 	if cfg.Environment == "production" {
@@ -132,10 +136,15 @@ func main() {
 			}
 		}
 
-		// Categories Route
+		// Categories & Public Store Routes
 		v1.GET("/categories", productHandler.ListCategories)
 		v1.GET("/governorates", adminHandler.ListGovernorates)
 		v1.GET("/banners", adminHandler.ListHomeBanners)
+		v1.GET("/stores", adminHandler.ListStores)
+
+		// Public Installers/Engineers Directory
+		v1.GET("/installers", installerHandler.ListInstallers)
+		v1.GET("/installers/:id", installerHandler.GetInstallerDetail)
 
 		// Products Catalog Routes
 		productGroup := v1.Group("/products")
@@ -147,17 +156,10 @@ func main() {
 		protected := v1.Group("")
 		protected.Use(middleware.AuthMiddleware(authService))
 		{
-			protected.GET("/user/profile", func(c *gin.Context) {
-				userID, _ := c.Get("user_id")
-				email, _ := c.Get("email")
-				role, _ := c.Get("role")
-				c.JSON(http.StatusOK, gin.H{
-					"user_id": userID,
-					"email":   email,
-					"role":    role,
-					"status":  "authenticated",
-				})
-			})
+			// User Profile Management
+			protected.GET("/user/profile", profileHandler.GetProfile)
+			protected.PUT("/user/profile", profileHandler.UpdateProfile)
+			protected.PUT("/user/password", profileHandler.ChangePassword)
 
 			// Orders Management Routes
 			ordersGroup := protected.Group("/orders")
@@ -184,7 +186,17 @@ func main() {
 				utils.SuccessResponse(c, http.StatusOK, "تم شحن المحفظة بنجاح", gin.H{"new_balance_usd": 2000.00})
 			})
 
-			// Merchant & Admin Product Management Routes
+			// Merchant Product Management Routes
+			merchantGroup := protected.Group("/merchant/products")
+			merchantGroup.Use(middleware.RequirePermission(domain.PermProductsOwn))
+			{
+				merchantGroup.GET("", productHandler.ListMerchantProducts)
+				merchantGroup.POST("", productHandler.CreateMerchantProduct)
+				merchantGroup.PUT("/:id", productHandler.UpdateMerchantProduct)
+				merchantGroup.DELETE("/:id", productHandler.DeleteMerchantProduct)
+			}
+
+			// Admin Product Management Routes
 			adminProducts := protected.Group("/products")
 			adminProducts.Use(middleware.RequireRole(domain.RoleAdmin, domain.RoleMerchant))
 			{
@@ -193,6 +205,16 @@ func main() {
 
 			// Image Upload Route
 			protected.POST("/upload/image", uploadHandler.UploadImage)
+
+			// Notifications REST API
+			notifGroup := protected.Group("/notifications")
+			{
+				notifGroup.GET("", notifHandler.ListNotifications)
+				notifGroup.GET("/unread-count", notifHandler.UnreadCount)
+				notifGroup.PUT("/:id/read", notifHandler.MarkAsRead)
+				notifGroup.PUT("/read-all", notifHandler.MarkAllAsRead)
+				notifGroup.DELETE("/:id", notifHandler.DeleteNotification)
+			}
 
 			// Notifications WebSocket
 			protected.GET("/admin/notifications/ws", wsHandler.HandleConnections)
@@ -216,6 +238,9 @@ func main() {
 				// Stores
 				adminOnly.GET("/stores", adminHandler.ListStores)
 				adminOnly.POST("/stores", adminHandler.CreateStore)
+				adminOnly.PUT("/stores/:id/verify", adminHandler.VerifyStore)
+				adminOnly.GET("/stores/:id/delivery-fees", adminHandler.GetStoreDeliveryFees)
+				adminOnly.PUT("/stores/:id/delivery-fees", adminHandler.UpdateStoreDeliveryFees)
 
 				// Orders
 				adminOnly.GET("/orders", adminHandler.ListOrders)
@@ -224,6 +249,7 @@ func main() {
 
 				// Products
 				adminOnly.GET("/products", adminHandler.ListProducts)
+				adminOnly.GET("/products/low-stock", adminHandler.LowStockProducts)
 				adminOnly.PUT("/products/:id", adminHandler.UpdateProduct)
 				adminOnly.DELETE("/products/:id", adminHandler.DeleteProduct)
 

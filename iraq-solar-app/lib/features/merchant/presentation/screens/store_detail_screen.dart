@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/cart_service.dart';
 import '../../../../core/widgets/app_toast.dart';
+import '../../../../core/data/mock_products_repository.dart';
+import '../../../../core/widgets/product_image_widget.dart';
 import '../widgets/store_chat_dialog.dart';
 import '../widgets/store_banner_carousel.dart';
 import '../../../products/presentation/screens/product_detail_screen.dart';
@@ -38,68 +40,12 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
     super.initState();
     CartService.instance.cartChangeNotifier.addListener(_onCartChanged);
 
-    _allStoreProducts = [
-      {
-        'id': 'p1',
-        'name': 'لوح طاقة شمسية LONGi 550W N-Type TOPCon',
-        'category': 'ألواح شمسية',
-        'priceIQD': '175,000 د.ع',
-        'stock': 140,
-        'warranty': '25 سنة كفالة كفاءة',
-        'icon': Icons.solar_power_rounded,
-        'rating': 4.9,
-      },
-      {
-        'id': 'p2',
-        'name': 'انفيرتر هجين Deye 8kW Three Phase 48V',
-        'category': 'انفيرترات هجينة',
-        'priceIQD': '1,875,000 د.ع',
-        'stock': 24,
-        'warranty': '5 سنوات كفالة استبدال',
-        'icon': Icons.bolt_rounded,
-        'rating': 4.8,
-      },
-      {
-        'id': 'p3',
-        'name': 'بطارية ليثيوم Felicity 10.2kWh LiFePO4 48V',
-        'category': 'بطاريات ليثيوم',
-        'priceIQD': '2,175,000 د.ع',
-        'stock': 35,
-        'warranty': '6000 دورة تفريغ عميق',
-        'icon': Icons.battery_charging_full_rounded,
-        'rating': 4.9,
-      },
-      {
-        'id': 'p4',
-        'name': 'هيكل تثبيت ألمنيوم مقاوم للرياح 4 ألواح',
-        'category': 'ملحقات وكيبلات',
-        'priceIQD': '130,000 د.ع',
-        'stock': 80,
-        'warranty': 'ألمنيوم أنوديزد مضاد للصدأ',
-        'icon': Icons.grid_on_rounded,
-        'rating': 4.7,
-      },
-      {
-        'id': 'p5',
-        'name': 'كابل طاقة شمسية نحاسي 6mm² - 100 متر',
-        'category': 'ملحقات وكيبلات',
-        'priceIQD': '145,000 د.ع',
-        'stock': 50,
-        'warranty': 'مقاوم للأشعة فوق البنفسجية',
-        'icon': Icons.cable_rounded,
-        'rating': 4.8,
-      },
-      {
-        'id': 'p6',
-        'name': 'منظومة طاقة شمسية كاملة 10kW مع البطاريات',
-        'category': 'باكات كاملة',
-        'priceIQD': '6,300,000 د.ع',
-        'stock': 10,
-        'warranty': 'تراخيص ومعاينة مجانية',
-        'icon': Icons.home_max_rounded,
-        'rating': 5.0,
-      },
-    ];
+    _allStoreProducts = MockProductsRepository.allProductsAsMaps.map((p) {
+      return {
+        ...p,
+        'priceIQD': p['price'],
+      };
+    }).toList();
   }
 
   void _onCartChanged() {
@@ -583,13 +529,8 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
           MaterialPageRoute(
             builder: (context) => ProductDetailScreen(
               product: {
-                'name': item['name'],
-                'brand': storeName,
-                'price_iqd': item['priceIQD'],
-                'price_usd': 115.0,
-                'warranty': item['warranty'],
-                'stock': item['stock'],
-                'category': item['category'],
+                ...item,
+                'store': storeName,
               },
             ),
           ),
@@ -601,38 +542,36 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
         ),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.backgroundLight,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Stack(
-                  children: [
-                    Center(
-                      child: Icon(item['icon'] as IconData, color: AppTheme.primaryGold, size: 44),
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: ProductImageWidget(
+                      imagePath: item['image'] as String?,
+                      type: item['type'] as String?,
                     ),
-                    Positioned(
-                      top: 6,
-                      right: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppTheme.darkNavy.withOpacity(0.8),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          'متوفر: ${item['stock']}',
-                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                        ),
+                  ),
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.darkNavy.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'متوفر: ${item['stock'] ?? 20}',
+                        style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 8),

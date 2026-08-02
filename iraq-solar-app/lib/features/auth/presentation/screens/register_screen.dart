@@ -12,7 +12,7 @@ class SolarRegisterScreen extends StatefulWidget {
 }
 
 class _SolarRegisterScreenState extends State<SolarRegisterScreen> {
-  String _selectedRole = 'customer';
+  final String _selectedRole = 'customer';
   final _nameController = TextEditingController(text: 'أحمد علي العبيدي');
   final _emailController = TextEditingController(text: 'ahmed.engineer@iraqsolar.iq');
   final _phoneController = TextEditingController(text: '07701234567');
@@ -75,20 +75,6 @@ class _SolarRegisterScreenState extends State<SolarRegisterScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('نوع الحساب في المنظومة:', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.darkNavy)),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _selectedRole,
-                      decoration: const InputDecoration(prefixIcon: Icon(Icons.badge_outlined, color: AppTheme.primaryGold)),
-                      items: const [
-                        DropdownMenuItem(value: 'customer', child: Text('زبون / صاحب منزل أو محل')),
-                        DropdownMenuItem(value: 'engineer', child: Text('مهندس طاقة شمسية استشاري')),
-                        DropdownMenuItem(value: 'installer', child: Text('فني فحص وتركيب ميداني')),
-                        DropdownMenuItem(value: 'merchant', child: Text('تاجر / مورد مكونات شمسية')),
-                      ],
-                      onChanged: (val) => setState(() => _selectedRole = val!),
-                    ),
-                    const SizedBox(height: 16),
                     const Text('الاسم الكامل:', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.darkNavy)),
                     const SizedBox(height: 8),
                     TextField(

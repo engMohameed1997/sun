@@ -26,7 +26,7 @@ func AuthMiddleware(authService *service.AuthService) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := authService.ValidateToken(parts[1])
+		claims, err := authService.ValidateTokenWithContext(c.Request.Context(), parts[1])
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 			c.Abort()
@@ -61,3 +61,24 @@ func RequireRole(roles ...domain.Role) gin.HandlerFunc {
 		c.Abort()
 	}
 }
+
+func RequirePermission(perm domain.Permission) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		roleVal, exists := c.Get("role")
+		if !exists {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: No role found in request context"})
+			c.Abort()
+			return
+		}
+
+		userRole := roleVal.(domain.Role)
+		if domain.HasPermission(userRole, perm) {
+			c.Next()
+			return
+		}
+
+		c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden: Insufficient permissions"})
+		c.Abort()
+	}
+}
+
