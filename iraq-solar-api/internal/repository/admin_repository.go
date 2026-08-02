@@ -36,7 +36,7 @@ type OrderWithUser struct {
 	ID              uuid.UUID          `db:"id" json:"id"`
 	UserID          uuid.UUID          `db:"user_id" json:"user_id"`
 	Status          string             `db:"status" json:"status"`
-	TotalAmountUSD  float64            `db:"total_amount_usd" json:"total_amount_usd"`
+	TotalAmountIQD  float64            `db:"total_amount_iqd" json:"total_amount_iqd"`
 	ShippingAddress string             `db:"shipping_address" json:"shipping_address"`
 	PaymentMethod   string             `db:"payment_method" json:"payment_method"`
 	PaymentStatus   string             `db:"payment_status" json:"payment_status"`
@@ -60,7 +60,7 @@ type AuditLog struct {
 
 type DashboardStatsResult struct {
 	TotalOrders       int     `json:"total_orders"`
-	TotalRevenue      float64 `json:"total_revenue_usd"`
+	TotalRevenue      float64 `json:"total_revenue_iqd"`
 	TotalUsers        int     `json:"total_users"`
 	TotalProducts     int     `json:"total_products"`
 	PendingOrders     int     `json:"pending_orders"`
@@ -277,7 +277,7 @@ func (r *AdminRepository) DashboardStats(ctx context.Context) (*DashboardStatsRe
 
 	stats := &DashboardStatsResult{}
 	r.db.GetContext(ctx, &stats.TotalOrders, "SELECT COUNT(*) FROM orders")
-	r.db.GetContext(ctx, &stats.TotalRevenue, "SELECT COALESCE(SUM(total_amount_usd),0) FROM orders WHERE status IN ('completed','confirmed','processing')")
+	r.db.GetContext(ctx, &stats.TotalRevenue, "SELECT COALESCE(SUM(total_amount_iqd),0) FROM orders WHERE status IN ('completed','confirmed','processing')")
 	r.db.GetContext(ctx, &stats.TotalUsers, "SELECT COUNT(*) FROM users WHERE deleted_at IS NULL")
 	r.db.GetContext(ctx, &stats.TotalProducts, "SELECT COUNT(*) FROM products")
 	r.db.GetContext(ctx, &stats.PendingOrders, "SELECT COUNT(*) FROM orders WHERE status='pending'")
@@ -299,7 +299,7 @@ func (r *AdminRepository) RevenueByPeriod(ctx context.Context, days int) ([]Reve
 			{Date: "2026-07-26", Revenue: 36300},
 		}, nil
 	}
-	query := `SELECT TO_CHAR(created_at::date, 'YYYY-MM-DD') as date, COALESCE(SUM(total_amount_usd),0) as revenue
+	query := `SELECT TO_CHAR(created_at::date, 'YYYY-MM-DD') as date, COALESCE(SUM(total_amount_iqd),0) as revenue
 		FROM orders WHERE created_at >= NOW() - INTERVAL '1 day' * $1 AND status != 'cancelled'
 		GROUP BY created_at::date ORDER BY created_at::date ASC`
 	var data []RevenueDataPoint
@@ -330,7 +330,7 @@ func (r *AdminRepository) TopProducts(ctx context.Context, limit int) ([]TopProd
 			{ID: uuid.New(), Name: "بطارية ليثيوم Felicity 10.2kWh", Sales: 30, Revenue: 43500},
 		}, nil
 	}
-	query := `SELECT p.id, p.name, COALESCE(SUM(oi.quantity),0) as sales, COALESCE(SUM(oi.total_price_usd),0) as revenue
+	query := `SELECT p.id, p.name, COALESCE(SUM(oi.quantity),0) as sales, COALESCE(SUM(oi.total_price_iqd),0) as revenue
 		FROM products p LEFT JOIN order_items oi ON p.id = oi.product_id
 		GROUP BY p.id, p.name ORDER BY sales DESC LIMIT $1`
 	var data []TopProduct
@@ -364,7 +364,7 @@ func (r *AdminRepository) ListAllOrders(ctx context.Context, status, search stri
 	var total int
 	r.db.GetContext(ctx, &total, fmt.Sprintf("SELECT COUNT(*) FROM orders o JOIN users u ON o.user_id=u.id WHERE %s", whereClause), args...)
 
-	query := fmt.Sprintf(`SELECT o.id, o.user_id, o.status, o.total_amount_usd, o.shipping_address, o.payment_method, 
+	query := fmt.Sprintf(`SELECT o.id, o.user_id, o.status, o.total_amount_iqd, o.shipping_address, o.payment_method, 
 		o.payment_status, o.created_at, o.updated_at, u.full_name as customer_name, u.email as customer_email, u.phone as customer_phone
 		FROM orders o JOIN users u ON o.user_id=u.id WHERE %s ORDER BY o.created_at DESC LIMIT $%d OFFSET $%d`,
 		whereClause, argIdx, argIdx+1)
@@ -380,7 +380,7 @@ func (r *AdminRepository) GetOrderDetail(ctx context.Context, id uuid.UUID) (*Or
 		return nil, nil, nil
 	}
 	var order OrderWithUser
-	err := r.db.GetContext(ctx, &order, `SELECT o.id, o.user_id, o.status, o.total_amount_usd, o.shipping_address, o.payment_method,
+	err := r.db.GetContext(ctx, &order, `SELECT o.id, o.user_id, o.status, o.total_amount_iqd, o.shipping_address, o.payment_method,
 		o.payment_status, o.created_at, o.updated_at, u.full_name as customer_name, u.email as customer_email, u.phone as customer_phone
 		FROM orders o JOIN users u ON o.user_id=u.id WHERE o.id=$1`, id)
 	if err != nil {
@@ -407,26 +407,27 @@ func (r *AdminRepository) ListAllProducts(ctx context.Context, pType, search str
 		return []domain.Product{}, 0, nil
 	}
 	offset := (page - 1) * perPage
-	where := []string{"1=1"}
+	where := []string{"p.deleted_at IS NULL"}
 	args := []interface{}{}
 	argIdx := 1
 
 	if pType != "" {
-		where = append(where, fmt.Sprintf("type = $%d", argIdx))
+		where = append(where, fmt.Sprintf("p.type = $%d", argIdx))
 		args = append(args, pType)
 		argIdx++
 	}
 	if search != "" {
-		where = append(where, fmt.Sprintf("(name ILIKE $%d OR sku ILIKE $%d OR brand ILIKE $%d)", argIdx, argIdx, argIdx))
+		where = append(where, fmt.Sprintf("(p.name ILIKE $%d OR p.sku ILIKE $%d OR p.model ILIKE $%d)", argIdx, argIdx, argIdx))
 		args = append(args, "%"+search+"%")
 		argIdx++
 	}
 
 	whereClause := strings.Join(where, " AND ")
 	var total int
-	r.db.GetContext(ctx, &total, fmt.Sprintf("SELECT COUNT(*) FROM products WHERE %s", whereClause), args...)
+	r.db.GetContext(ctx, &total, fmt.Sprintf("SELECT COUNT(*) FROM products p WHERE %s", whereClause), args...)
 
-	query := fmt.Sprintf("SELECT * FROM products WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", whereClause, argIdx, argIdx+1)
+	query := fmt.Sprintf(`SELECT p.id, p.category_id, p.merchant_id, p.store_id, p.branch_id, p.sku, p.name, p.brand_id, b.name AS brand_name, p.model, p.type, p.price_iqd, p.stock_quantity, p.reserved_quantity, p.low_stock_threshold, p.specifications, p.is_available, p.created_at, p.updated_at, p.deleted_at
+		FROM products p LEFT JOIN brands b ON p.brand_id = b.id WHERE %s ORDER BY p.created_at DESC LIMIT $%d OFFSET $%d`, whereClause, argIdx, argIdx+1)
 	args = append(args, perPage, offset)
 
 	var products []domain.Product
@@ -434,12 +435,12 @@ func (r *AdminRepository) ListAllProducts(ctx context.Context, pType, search str
 	return products, total, err
 }
 
-func (r *AdminRepository) UpdateProduct(ctx context.Context, id uuid.UUID, name, brand, model string, priceUSD float64, stockQty int, isAvailable bool) error {
+func (r *AdminRepository) UpdateProduct(ctx context.Context, id uuid.UUID, name, model string, priceIQD float64, stockQty int, isAvailable bool) error {
 	if r.db == nil {
 		return nil
 	}
-	_, err := r.db.ExecContext(ctx, `UPDATE products SET name=$1, brand=$2, model=$3, price_usd=$4, stock_quantity=$5, is_available=$6, updated_at=NOW() WHERE id=$7`,
-		name, brand, model, priceUSD, stockQty, isAvailable, id)
+	_, err := r.db.ExecContext(ctx, `UPDATE products SET name=$1, model=$2, price_iqd=$3, stock_quantity=$4, is_available=$5, updated_at=NOW() WHERE id=$6`,
+		name, model, priceIQD, stockQty, isAvailable, id)
 	return err
 }
 
@@ -589,26 +590,27 @@ func (r *AdminRepository) ListMerchantProducts(ctx context.Context, merchantID u
 		return []domain.Product{}, 0, nil
 	}
 	offset := (page - 1) * perPage
-	where := []string{"merchant_id = $1", "deleted_at IS NULL"}
+	where := []string{"p.merchant_id = $1", "p.deleted_at IS NULL"}
 	args := []interface{}{merchantID}
 	argIdx := 2
 
 	if pType != "" {
-		where = append(where, fmt.Sprintf("type = $%d", argIdx))
+		where = append(where, fmt.Sprintf("p.type = $%d", argIdx))
 		args = append(args, pType)
 		argIdx++
 	}
 	if search != "" {
-		where = append(where, fmt.Sprintf("(name ILIKE $%d OR sku ILIKE $%d OR brand ILIKE $%d)", argIdx, argIdx, argIdx))
+		where = append(where, fmt.Sprintf("(p.name ILIKE $%d OR p.sku ILIKE $%d OR p.model ILIKE $%d)", argIdx, argIdx, argIdx))
 		args = append(args, "%"+search+"%")
 		argIdx++
 	}
 
 	whereClause := strings.Join(where, " AND ")
 	var total int
-	r.db.GetContext(ctx, &total, fmt.Sprintf("SELECT COUNT(*) FROM products WHERE %s", whereClause), args...)
+	r.db.GetContext(ctx, &total, fmt.Sprintf("SELECT COUNT(*) FROM products p WHERE %s", whereClause), args...)
 
-	query := fmt.Sprintf("SELECT * FROM products WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d", whereClause, argIdx, argIdx+1)
+	query := fmt.Sprintf(`SELECT p.id, p.category_id, p.merchant_id, p.store_id, p.branch_id, p.sku, p.name, p.brand_id, b.name AS brand_name, p.model, p.type, p.price_iqd, p.stock_quantity, p.reserved_quantity, p.low_stock_threshold, p.specifications, p.is_available, p.created_at, p.updated_at, p.deleted_at
+		FROM products p LEFT JOIN brands b ON p.brand_id = b.id WHERE %s ORDER BY p.created_at DESC LIMIT $%d OFFSET $%d`, whereClause, argIdx, argIdx+1)
 	args = append(args, perPage, offset)
 
 	var products []domain.Product
@@ -620,7 +622,8 @@ func (r *AdminRepository) GetLowStockProducts(ctx context.Context) ([]domain.Pro
 	if r.db == nil {
 		return []domain.Product{}, nil
 	}
-	query := `SELECT * FROM products WHERE (stock_quantity - reserved_quantity) <= low_stock_threshold AND deleted_at IS NULL ORDER BY (stock_quantity - reserved_quantity) ASC`
+	query := `SELECT p.id, p.category_id, p.merchant_id, p.store_id, p.branch_id, p.sku, p.name, p.brand_id, b.name AS brand_name, p.model, p.type, p.price_iqd, p.stock_quantity, p.reserved_quantity, p.low_stock_threshold, p.specifications, p.is_available, p.created_at, p.updated_at, p.deleted_at
+		FROM products p LEFT JOIN brands b ON p.brand_id = b.id WHERE (p.stock_quantity - p.reserved_quantity) <= p.low_stock_threshold AND p.deleted_at IS NULL ORDER BY (p.stock_quantity - p.reserved_quantity) ASC`
 	var products []domain.Product
 	err := r.db.SelectContext(ctx, &products, query)
 	return products, err

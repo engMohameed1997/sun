@@ -3,7 +3,6 @@ import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/product_image_widget.dart';
 import '../../../merchant/presentation/screens/store_detail_screen.dart';
-import 'product_detail_screen.dart';
 
 class PromotionsCatalogScreen extends StatefulWidget {
   const PromotionsCatalogScreen({Key? key}) : super(key: key);
@@ -15,15 +14,8 @@ class PromotionsCatalogScreen extends StatefulWidget {
 class _PromotionsCatalogScreenState extends State<PromotionsCatalogScreen> {
   int _selectedCategoryIndex = 0;
   List<Map<String, dynamic>> _discountedProducts = [];
+  List<String> _categories = ['الكل'];
   bool _isLoading = true;
-
-  final List<String> _categories = [
-    'الكل',
-    'ألواح شمسية',
-    'انفيرترات هجينة',
-    'بطاريات ليثيوم',
-    'منظومات كاملة',
-  ];
 
   @override
   void initState() {
@@ -32,42 +24,90 @@ class _PromotionsCatalogScreenState extends State<PromotionsCatalogScreen> {
   }
 
   Future<void> _fetchPromotions() async {
-    final res = await ApiClient.getProducts();
+    final productsRes = await ApiClient.getProducts();
+    final storesRes = await ApiClient.getStores();
+    final catRes = await ApiClient.getCategories();
+
+    // Build store map
+    Map<String, Map<String, dynamic>> storeMap = {};
+    if (storesRes['data'] != null) {
+      List storesList = [];
+      if (storesRes['data'] is Map) {
+        storesList = (storesRes['data'] as Map<String, dynamic>)['stores'] as List? ?? [];
+      } else if (storesRes['data'] is List) {
+        storesList = storesRes['data'] as List;
+      }
+      for (final s in storesList) {
+        final sm = s as Map<String, dynamic>;
+        storeMap[sm['id']?.toString() ?? ''] = sm;
+      }
+    }
+
+    // Build category names map
+    Map<int, String> categoryNames = {};
+    if (catRes['data'] != null && catRes['data'] is List) {
+      for (final cat in catRes['data'] as List) {
+        final cm = cat as Map<String, dynamic>;
+        categoryNames[cm['id'] as int] = cm['name'] as String;
+      }
+    }
+
     if (mounted) {
       setState(() {
-        if (res['data'] != null && res['data'] is List) {
-          final list = res['data'] as List;
+        if (productsRes['data'] != null && productsRes['data'] is List) {
+          final list = productsRes['data'] as List;
           _discountedProducts = list.map((item) {
             final m = item as Map<String, dynamic>;
-            final priceUsd = (m['price_usd'] ?? 0.0).toDouble();
-            final priceRaw = (priceUsd * 1500).toInt();
+            final priceRaw = (m['price_iqd'] ?? 0).toInt();
             final priceFormatted = '${priceRaw.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match match) => '${match[1]},')} د.ع';
+            final rawSpecs = m['specifications'];
+            final specsMap = rawSpecs != null && rawSpecs is Map
+                ? Map<String, dynamic>.from(rawSpecs)
+                : <String, dynamic>{};
+            final warrantyVal = specsMap['الضمان']?.toString() ?? '';
+            final catId = m['category_id'];
+            final catName = catId != null ? (categoryNames[catId] ?? 'تصنيف $catId') : 'منظومات شمسية';
+            final storeId = m['store_id']?.toString() ?? '';
+            final storeInfo = storeMap[storeId];
+            final storeName = storeInfo?['name']?.toString() ?? 'متجر غير محدد';
+            final storeRating = storeInfo?['rating'];
+            final ratingStr = storeRating != null ? '$storeRating ⭐' : '—';
+            final storePhone = storeInfo?['phone']?.toString() ?? '07700000000';
             return {
               'id': m['id']?.toString() ?? '',
               'name': m['name'] ?? '',
-              'category': m['category_id'] ?? 'منظومات شمسية',
-              'originalPriceIQD': priceFormatted,
-              'offerPriceIQD': priceFormatted,
+              'brand': m['brand_name'] ?? 'ماركة معتمدة',
+              'model': m['model'] ?? '',
+              'category': catName,
               'price': priceFormatted,
+              'priceIQD': priceFormatted,
               'price_iqd': priceRaw,
-              'savedIQD': 'عرض خاص',
-              'discountPercent': 'عرض خاص 🔥',
-              'offerDetails': 'عرض من المتجر المعتمد',
-              'expiryDate': 'لفترة محدودة',
-              'icon': Icons.local_offer_rounded,
-              'image': 'assets/images/solar_panel_longi.jpg',
+              'warranty': warrantyVal,
+              'stock': m['stock_quantity'] ?? 50,
               'type': m['type'] ?? 'panel',
-              'brand': m['brand'] ?? 'علامة معتمدة',
-              'store': 'متجر معتمد',
+              'specs': specsMap,
+              'image': 'assets/images/solar_panel_longi.jpg',
+              'store': storeName,
               'storeData': {
-                'id': m['merchant_id']?.toString() ?? '',
-                'name': 'متجر طاقة معتمد',
-                'rating': '4.9 ⭐',
-                'city': 'بغداد / المحافظات',
-                'phone': '07700000000',
+                'id': storeId,
+                'name': storeName,
+                'rating': ratingStr,
+                'city': storePhone,
+                'phone': storePhone,
               },
             };
           }).toList();
+
+          // Build dynamic categories from products
+          final seenCats = <String>{};
+          _categories = ['الكل'];
+          for (final p in _discountedProducts) {
+            final cat = p['category'] as String;
+            if (!seenCats.contains(cat)) {
+              seenCats.add(cat);
+              _categories.add(cat);
+            }
+          }
         } else {
           _discountedProducts = [];
         }
@@ -199,198 +239,164 @@ class _PromotionsCatalogScreenState extends State<PromotionsCatalogScreen> {
 
             // Offers List
             Expanded(
-              child: _filteredOffers.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.local_offer_outlined, size: 56, color: Colors.grey.shade400),
-                          const SizedBox(height: 10),
-                          Text('لا توجد عروض حالية في قسم ${_categories[_selectedCategoryIndex]}',
-                              style: TextStyle(color: Colors.grey.shade600, fontSize: 13, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _filteredOffers.length,
-                      itemBuilder: (context, index) {
-                        final offer = _filteredOffers[index];
-                        final storeData = offer['storeData'] as Map<String, dynamic>;
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryGold))
+                  : _filteredOffers.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.inventory_2_outlined, size: 56, color: Colors.grey.shade400),
+                              const SizedBox(height: 10),
+                              Text('لا توجد منتجات في قسم ${_categories[_selectedCategoryIndex]}',
+                                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _filteredOffers.length,
+                          itemBuilder: (context, index) {
+                            final offer = _filteredOffers[index];
+                            final storeData = offer['storeData'] as Map<String, dynamic>;
 
-                        return GestureDetector(
-                          onTap: () => _navigateToStore(storeData),
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 16),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(color: AppTheme.primaryGold.withOpacity(0.4), width: 1.5),
-                              boxShadow: [
-                                BoxShadow(color: AppTheme.primaryGold.withOpacity(0.08), blurRadius: 12, offset: const Offset(0, 4)),
-                              ],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Offer Top Badges Header
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFDC2626),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        offer['discountPercent'] as String,
-                                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.primaryGold.withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Text(
-                                        offer['expiryDate'] as String,
-                                        style: const TextStyle(color: AppTheme.secondaryGold, fontSize: 10, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
+                            return GestureDetector(
+                              onTap: () => _navigateToStore(storeData),
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 16),
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(24),
+                                  border: Border.all(color: AppTheme.primaryGold.withOpacity(0.4), width: 1.5),
+                                  boxShadow: [
+                                    BoxShadow(color: AppTheme.primaryGold.withOpacity(0.08), blurRadius: 12, offset: const Offset(0, 4)),
                                   ],
                                 ),
-
-                                const SizedBox(height: 12),
-
-                                // Product Title & Icon
-                                 Row(
-                                   children: [
-                                     ClipRRect(
-                                       borderRadius: BorderRadius.circular(16),
-                                       child: SizedBox(
-                                         width: 64,
-                                         height: 64,
-                                         child: ProductImageWidget(
-                                           imagePath: offer['image'] as String?,
-                                           type: offer['type'] as String?,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Product Title & Icon
+                                     Row(
+                                       children: [
+                                         ClipRRect(
+                                           borderRadius: BorderRadius.circular(16),
+                                           child: SizedBox(
+                                             width: 64,
+                                             height: 64,
+                                             child: ProductImageWidget(
+                                               imagePath: offer['image'] as String?,
+                                               type: offer['type'] as String?,
+                                             ),
+                                           ),
                                          ),
-                                       ),
-                                     ),
-                                     const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            offer['name'] as String,
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.darkNavy),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
+                                         const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                offer['name'] as String,
+                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.darkNavy),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                '${offer['brand'] ?? ''} • ${offer['model'] ?? ''}',
+                                                style: TextStyle(fontSize: 11, color: Colors.grey.shade600, height: 1.3),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
                                           ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            offer['offerDetails'] as String,
-                                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600, height: 1.3),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-
-                                const SizedBox(height: 14),
-
-                                // Price Breakdown Row (Original vs Offer Price in IQD)
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.backgroundLight,
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const Text('السعر السابق:', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                                          Text(
-                                            offer['originalPriceIQD'] as String,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.grey,
-                                              decoration: TextDecoration.lineThrough,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
-                                        children: [
-                                          Text(offer['savedIQD'] as String, style: const TextStyle(fontSize: 10, color: AppTheme.accentGreen, fontWeight: FontWeight.bold)),
-                                          Text(
-                                            offer['offerPriceIQD'] as String,
-                                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryGold),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
-                                const SizedBox(height: 14),
-
-                                // Merchant Store Badge & Direct Navigation Button
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.storefront_rounded, color: AppTheme.darkNavy, size: 18),
-                                        const SizedBox(width: 6),
-                                        Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              storeData['name'] as String,
-                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.darkNavy),
-                                            ),
-                                            Text(
-                                              storeData['city'] as String,
-                                              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-                                            ),
-                                          ],
                                         ),
                                       ],
                                     ),
+
+                                    const SizedBox(height: 14),
+
+                                    // Price Row
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      padding: const EdgeInsets.all(12),
                                       decoration: BoxDecoration(
-                                        color: AppTheme.darkNavy,
-                                        borderRadius: BorderRadius.circular(14),
+                                        color: AppTheme.backgroundLight,
+                                        borderRadius: BorderRadius.circular(16),
                                       ),
-                                      child: const Row(
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Text('الانتقال للمتجر والتسوق', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                                          SizedBox(width: 4),
-                                          Icon(Icons.arrow_back_rounded, color: AppTheme.primaryGold, size: 14),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Text('التصنيف:', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                              Text(
+                                                offer['category'] as String,
+                                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.darkNavy),
+                                              ),
+                                            ],
+                                          ),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.end,
+                                            children: [
+                                              const Text('السعر:', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                              Text(
+                                                offer['price'] as String,
+                                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryGold),
+                                              ),
+                                            ],
+                                          ),
                                         ],
                                       ),
                                     ),
+
+                                    const SizedBox(height: 14),
+
+                                    // Merchant Store Badge & Direct Navigation Button
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.storefront_rounded, color: AppTheme.darkNavy, size: 18),
+                                            const SizedBox(width: 6),
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  storeData['name'] as String,
+                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.darkNavy),
+                                                ),
+                                                Text(
+                                                  storeData['phone'] as String,
+                                                  style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.darkNavy,
+                                            borderRadius: BorderRadius.circular(14),
+                                          ),
+                                          child: const Row(
+                                            children: [
+                                              Text('الانتقال للمتجر والتسوق', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                              SizedBox(width: 4),
+                                              Icon(Icons.arrow_back_rounded, color: AppTheme.primaryGold, size: 14),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ],
                                 ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                              ),
+                            );
+                          },
+                        ),
             ),
           ],
         ),

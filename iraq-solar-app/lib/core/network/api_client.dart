@@ -645,5 +645,25 @@ class ApiClient {
       return {'success': false, 'message': 'فشل تغيير كلمة المرور: $e'};
     }
   }
+
+  // 20. Governorates List (Public)
+  static Future<Map<String, dynamic>> getGovernorates() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/governorates'), headers: headers());
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب المحافظات: $e'};
+    }
+  }
+
+  // 21. Store Delivery Fees (Public - per store)
+  static Future<Map<String, dynamic>> getStoreDeliveryFees(String storeId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/stores/$storeId/delivery-fees'), headers: headers());
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب أسعار التوصيل: $e'};
+    }
+  }
 }
 

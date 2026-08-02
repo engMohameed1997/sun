@@ -21,7 +21,7 @@ export const BrandsPage: React.FC = () => {
   const fetchBrands = async () => {
     setIsLoading(true);
     try {
-      const res = await api.get('/brands');
+      const res = await api.get('/admin/brands');
       setBrands(res.data?.data || []);
     } catch (err) {
       console.error('Failed to fetch brands', err);

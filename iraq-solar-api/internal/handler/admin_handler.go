@@ -393,9 +393,8 @@ func (h *AdminHandler) ListProducts(c *gin.Context) {
 
 type UpdateProductReq struct {
 	Name          string  `json:"name" binding:"required"`
-	Brand         string  `json:"brand" binding:"required"`
 	Model         string  `json:"model" binding:"required"`
-	PriceUSD      float64 `json:"price_usd" binding:"required,gt=0"`
+	PriceIQD      float64 `json:"price_iqd" binding:"required,gt=0"`
 	StockQuantity int     `json:"stock_quantity" binding:"gte=0"`
 	IsAvailable   bool    `json:"is_available"`
 }
@@ -414,7 +413,7 @@ func (h *AdminHandler) UpdateProduct(c *gin.Context) {
 	}
 
 	adminID := h.getAdminID(c)
-	if err := h.adminService.UpdateProduct(c.Request.Context(), adminID, id, req.Name, req.Brand, req.Model, req.PriceUSD, req.StockQuantity, req.IsAvailable); err != nil {
+	if err := h.adminService.UpdateProduct(c.Request.Context(), adminID, id, req.Name, req.Model, req.PriceIQD, req.StockQuantity, req.IsAvailable); err != nil {
 		utils.InternalServerError(c, err)
 		return
 	}

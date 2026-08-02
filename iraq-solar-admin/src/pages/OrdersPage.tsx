@@ -144,7 +144,7 @@ export const OrdersPage: React.FC = () => {
                       <div className="text-[11px] text-slate-400">{order.customer_phone}</div>
                     </td>
                     <td className="p-4 text-slate-300 max-w-xs truncate">{order.shipping_address}</td>
-                    <td className="p-4 font-bold text-emerald-400">${order.total_amount_usd.toLocaleString()}</td>
+                    <td className="p-4 font-bold text-emerald-400">{order.total_amount_iqd.toLocaleString()} د.ع</td>
                     <td className="p-4">{getStatusBadge(order.status)}</td>
                     <td className="p-4 text-slate-400">{new Date(order.created_at).toLocaleDateString('ar-IQ')}</td>
                     <td className="p-4 text-center">

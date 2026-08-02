@@ -155,12 +155,12 @@ func (s *AdminService) ListProducts(ctx context.Context, pType, search string, p
 	return s.adminRepo.ListAllProducts(ctx, pType, search, page, perPage)
 }
 
-func (s *AdminService) UpdateProduct(ctx context.Context, adminID uuid.UUID, id uuid.UUID, name, brand, model string, priceUSD float64, stockQty int, isAvailable bool) error {
-	err := s.adminRepo.UpdateProduct(ctx, id, name, brand, model, priceUSD, stockQty, isAvailable)
+func (s *AdminService) UpdateProduct(ctx context.Context, adminID uuid.UUID, id uuid.UUID, name, model string, priceIQD float64, stockQty int, isAvailable bool) error {
+	err := s.adminRepo.UpdateProduct(ctx, id, name, model, priceIQD, stockQty, isAvailable)
 	if err == nil {
 		_ = s.adminRepo.CreateAuditLog(ctx, &adminID, "UPDATE_PRODUCT", "product", id.String(), map[string]interface{}{
 			"name":  name,
-			"price": priceUSD,
+			"price": priceIQD,
 			"stock": stockQty,
 		})
 	}

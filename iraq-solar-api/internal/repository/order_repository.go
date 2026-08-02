@@ -68,8 +68,8 @@ func (r *postgresOrderRepository) Create(ctx context.Context, order *domain.Orde
 
 	// 3. Insert order
 	orderQuery := `
-		INSERT INTO orders (id, user_id, status, total_amount_usd, shipping_address, payment_method, payment_status, created_at, updated_at)
-		VALUES (:id, :user_id, :status, :total_amount_usd, :shipping_address, :payment_method, :payment_status, :created_at, :updated_at)
+		INSERT INTO orders (id, user_id, status, total_amount_iqd, shipping_address, payment_method, payment_status, created_at, updated_at)
+		VALUES (:id, :user_id, :status, :total_amount_iqd, :shipping_address, :payment_method, :payment_status, :created_at, :updated_at)
 	`
 	_, err = tx.NamedExecContext(ctx, orderQuery, order)
 	if err != nil {
@@ -78,8 +78,8 @@ func (r *postgresOrderRepository) Create(ctx context.Context, order *domain.Orde
 
 	// 4. Insert order items
 	itemQuery := `
-		INSERT INTO order_items (id, order_id, product_id, quantity, unit_price_usd, total_price_usd)
-		VALUES (:id, :order_id, :product_id, :quantity, :unit_price_usd, :total_price_usd)
+		INSERT INTO order_items (id, order_id, product_id, quantity, unit_price_iqd, total_price_iqd)
+		VALUES (:id, :order_id, :product_id, :quantity, :unit_price_iqd, :total_price_iqd)
 	`
 	for _, item := range items {
 		_, err = tx.NamedExecContext(ctx, itemQuery, item)
@@ -104,7 +104,7 @@ func (r *postgresOrderRepository) FindByID(ctx context.Context, id uuid.UUID) (*
 	}
 
 	var order domain.Order
-	query := `SELECT id, user_id, status, total_amount_usd, shipping_address, payment_method, payment_status, created_at, updated_at FROM orders WHERE id = $1 LIMIT 1`
+	query := `SELECT id, user_id, status, total_amount_iqd, shipping_address, payment_method, payment_status, created_at, updated_at FROM orders WHERE id = $1 LIMIT 1`
 	err := r.db.GetContext(ctx, &order, query, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -114,7 +114,7 @@ func (r *postgresOrderRepository) FindByID(ctx context.Context, id uuid.UUID) (*
 	}
 
 	var items []domain.OrderItem
-	itemsQuery := `SELECT id, order_id, product_id, quantity, unit_price_usd, total_price_usd FROM order_items WHERE order_id = $1`
+	itemsQuery := `SELECT id, order_id, product_id, quantity, unit_price_iqd, total_price_iqd FROM order_items WHERE order_id = $1`
 	_ = r.db.SelectContext(ctx, &items, itemsQuery, id)
 	order.Items = items
 
@@ -127,7 +127,7 @@ func (r *postgresOrderRepository) FindByUserID(ctx context.Context, userID uuid.
 	}
 
 	var orders []domain.Order
-	query := `SELECT id, user_id, status, total_amount_usd, shipping_address, payment_method, payment_status, created_at, updated_at FROM orders WHERE user_id = $1 ORDER BY created_at DESC`
+	query := `SELECT id, user_id, status, total_amount_iqd, shipping_address, payment_method, payment_status, created_at, updated_at FROM orders WHERE user_id = $1 ORDER BY created_at DESC`
 	err := r.db.SelectContext(ctx, &orders, query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list user orders: %w", err)

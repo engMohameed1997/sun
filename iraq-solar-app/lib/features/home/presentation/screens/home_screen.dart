@@ -40,47 +40,70 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
 
     if (mounted) {
       setState(() {
-        if (productsRes['data'] != null && productsRes['data'] is List) {
-          final list = productsRes['data'] as List;
-          _productsList = list.map((item) {
-            final m = item as Map<String, dynamic>;
-            final priceUsd = (m['price_usd'] ?? 0.0).toDouble();
-            final priceRaw = (priceUsd * 1500).toInt();
-            return {
-              'id': m['id']?.toString() ?? '',
-              'name': m['name'] ?? '',
-              'brand': m['brand'] ?? 'ماركة معتمدة',
-              'store': 'متجر معتمد',
-              'category': m['category_id'] ?? 'منظومات شمسية',
-              'price': '${priceRaw.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match match) => '${match[1]},')} د.ع',
-              'priceIQD': '${priceRaw.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match match) => '${match[1]},')} د.ع',
-              'price_iqd': priceRaw,
-              'price_usd': priceUsd,
-              'image': 'assets/images/solar_panel_longi.jpg',
-              'rating': '4.9 ⭐',
-              'warranty': '25 سنة كفالة',
-              'stock': m['stock_quantity'] ?? 50,
-              'type': m['type'] ?? 'panel',
-              'specs': m['specifications'] ?? {},
-              'isFeatured': true,
-            };
-          }).toList();
-        }
-
-        if (storesRes['data'] != null && storesRes['data'] is List) {
-          final stores = storesRes['data'] as List;
-          _storesList = stores.map((s) {
+        // Build stores map first for product lookups
+        Map<String, Map<String, dynamic>> storeMap = {};
+        if (storesRes['data'] != null) {
+          List storesList = [];
+          if (storesRes['data'] is Map) {
+            storesList = (storesRes['data'] as Map<String, dynamic>)['stores'] as List? ?? [];
+          } else if (storesRes['data'] is List) {
+            storesList = storesRes['data'] as List;
+          }
+          for (final s in storesList) {
+            final sm = s as Map<String, dynamic>;
+            storeMap[sm['id']?.toString() ?? ''] = sm;
+          }
+          _storesList = storesList.map((s) {
             final sm = s as Map<String, dynamic>;
             return {
               'id': sm['id']?.toString() ?? '',
-              'name': sm['full_name'] ?? 'متجر طاقة متكامل',
-              'fullName': sm['full_name'] ?? 'متجر طاقة شمسية معتمد في العراق',
-              'rating': '4.9 ⭐',
-              'city': '${sm['governorate'] ?? 'بغداد'} - ${sm['city'] ?? 'المركز'}',
+              'name': sm['name'] ?? 'متجر طاقة متكامل',
+              'fullName': sm['description'] ?? 'متجر طاقة شمسية معتمد في العراق',
+              'rating': '${sm['rating'] ?? 0} ⭐',
+              'city': sm['phone'] ?? '07700000000',
               'verified': sm['is_verified'] ?? true,
               'phone': sm['phone'] ?? '07700000000',
               'icon': Icons.wb_sunny_rounded,
               'color': const Color(0xFFF59E0B),
+            };
+          }).toList();
+        }
+
+        if (productsRes['data'] != null && productsRes['data'] is List) {
+          final list = productsRes['data'] as List;
+          _productsList = list.map((item) {
+            final m = item as Map<String, dynamic>;
+            final priceRaw = (m['price_iqd'] ?? 0).toInt();
+            final priceFormatted = '${priceRaw.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match match) => '${match[1]},')} د.ع';
+            final rawSpecs = m['specifications'];
+            final specsMap = rawSpecs != null && rawSpecs is Map
+                ? Map<String, dynamic>.from(rawSpecs)
+                : <String, dynamic>{};
+            final warrantyVal = specsMap['الضمان']?.toString() ?? '';
+            final storeId = m['store_id']?.toString() ?? '';
+            final storeInfo = storeMap[storeId];
+            final storeName = storeInfo?['name']?.toString() ?? 'متجر غير محدد';
+            final storeRating = storeInfo?['rating'];
+            final ratingStr = storeRating != null ? '$storeRating ⭐' : '—';
+            return {
+              'id': m['id']?.toString() ?? '',
+              'name': m['name'] ?? '',
+              'brand': m['brand_name'] ?? 'ماركة معتمدة',
+              'model': m['model'] ?? '',
+              'store': storeName,
+              'store_description': storeInfo?['description'] ?? '',
+              'is_verified': storeInfo?['is_verified'] ?? false,
+              'category': m['category_id'] ?? 'منظومات شمسية',
+              'price': priceFormatted,
+              'priceIQD': priceFormatted,
+              'price_iqd': priceRaw,
+              'image': 'assets/images/solar_panel_longi.jpg',
+              'rating': ratingStr,
+              'warranty': warrantyVal,
+              'stock': m['stock_quantity'] ?? 50,
+              'type': m['type'] ?? 'panel',
+              'specs': specsMap,
+              'isFeatured': m['is_available'] ?? false,
             };
           }).toList();
         }

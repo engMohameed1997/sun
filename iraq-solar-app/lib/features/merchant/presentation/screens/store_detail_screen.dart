@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/cart_service.dart';
 import '../../../../core/widgets/app_toast.dart';
-import '../../../../core/data/mock_products_repository.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/widgets/product_image_widget.dart';
 import '../widgets/store_chat_dialog.dart';
 import '../widgets/store_banner_carousel.dart';
@@ -24,28 +24,96 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
   String _searchQuery = '';
   bool _isFavoriteStore = false;
 
-  final List<Map<String, dynamic>> _storeCategories = [
-    {'title': 'الكل', 'icon': Icons.grid_view_rounded},
-    {'title': 'ألواح شمسية', 'icon': Icons.wb_sunny_rounded},
-    {'title': 'انفيرترات هجينة', 'icon': Icons.bolt_rounded},
-    {'title': 'بطاريات ليثيوم', 'icon': Icons.battery_charging_full_rounded},
-    {'title': 'ملحقات وكيبلات', 'icon': Icons.build_circle_rounded},
-    {'title': 'باكات كاملة', 'icon': Icons.inventory_2_rounded},
+  List<Map<String, dynamic>> _storeCategories = [
+    {'title': 'الكل', 'icon': Icons.grid_view_rounded, 'category_id': null},
   ];
-
-  late List<Map<String, dynamic>> _allStoreProducts;
+  List<Map<String, dynamic>> _allStoreProducts = [];
+  bool _isLoadingProducts = true;
 
   @override
   void initState() {
     super.initState();
     CartService.instance.cartChangeNotifier.addListener(_onCartChanged);
+    _fetchStoreProducts();
+  }
 
-    _allStoreProducts = MockProductsRepository.allProductsAsMaps.map((p) {
-      return {
-        ...p,
-        'priceIQD': p['price'],
-      };
-    }).toList();
+  Future<void> _fetchStoreProducts() async {
+    final storeId = widget.storeData['id']?.toString() ?? '';
+    final res = await ApiClient.getProducts();
+    final catRes = await ApiClient.getCategories();
+
+    Map<int, String> categoryNames = {};
+    if (catRes['data'] != null && catRes['data'] is List) {
+      for (final cat in catRes['data'] as List) {
+        final cm = cat as Map<String, dynamic>;
+        categoryNames[cm['id'] as int] = cm['name'] as String;
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        if (res['data'] != null && res['data'] is List) {
+          final list = res['data'] as List;
+          _allStoreProducts = list.where((item) {
+            final m = item as Map<String, dynamic>;
+            return storeId.isEmpty || m['store_id']?.toString() == storeId;
+          }).map((item) {
+            final m = item as Map<String, dynamic>;
+            final priceRaw = (m['price_iqd'] ?? 0).toInt();
+            final priceFormatted = '${priceRaw.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match match) => '${match[1]},')} د.ع';
+            final catId = m['category_id'];
+            final catName = catId != null ? (categoryNames[catId] ?? 'تصنيف $catId') : 'منظومات شمسية';
+            final rawSpecs = m['specifications'];
+            final specsMap = rawSpecs != null && rawSpecs is Map
+                ? Map<String, dynamic>.from(rawSpecs)
+                : <String, dynamic>{};
+            final warrantyVal = specsMap['الضمان']?.toString() ?? '';
+            final storeName = widget.storeData['name']?.toString() ?? 'متجر غير محدد';
+            final storeRating = widget.storeData['rating'];
+            final ratingStr = storeRating != null ? '$storeRating ⭐' : '—';
+            return <String, dynamic>{
+              'id': m['id']?.toString() ?? '',
+              'name': m['name'] ?? '',
+              'brand': m['brand_name'] ?? 'ماركة معتمدة',
+              'model': m['model'] ?? '',
+              'store': storeName,
+              'store_description': widget.storeData['description'] ?? '',
+              'is_verified': widget.storeData['is_verified'] ?? widget.storeData['verified'] ?? false,
+              'category': catName,
+              'category_id': catId,
+              'price': priceFormatted,
+              'priceIQD': priceFormatted,
+              'price_iqd': priceRaw,
+              'image': 'assets/images/solar_panel_longi.jpg',
+              'rating': ratingStr,
+              'warranty': warrantyVal,
+              'stock': m['stock_quantity'] ?? 50,
+              'type': m['type'] ?? 'panel',
+              'specs': specsMap,
+              'isFeatured': m['is_available'] ?? false,
+            };
+          }).toList();
+
+          // Build dynamic categories from products (unique, no duplicates)
+          final seenCategories = <String>{};
+          _storeCategories = [
+            {'title': 'الكل', 'icon': Icons.grid_view_rounded, 'category_id': null},
+          ];
+          for (final p in _allStoreProducts) {
+            final catName = p['category'] as String;
+            if (!seenCategories.contains(catName)) {
+              seenCategories.add(catName);
+              _storeCategories.add({
+                'title': catName,
+                'icon': Icons.category_rounded,
+                'category_id': p['category_id'],
+              });
+            }
+          }
+        }
+        _isLoadingProducts = false;
+      });
+    }
   }
 
   void _onCartChanged() {
@@ -66,6 +134,15 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
           (product['name'] as String).toLowerCase().contains(_searchQuery.toLowerCase());
       return matchesCategory && matchesQuery;
     }).toList();
+  }
+
+  IconData _getCategoryIcon(String title) {
+    if (title.contains('ألواح') || title.contains('الواح')) return Icons.wb_sunny_rounded;
+    if (title.contains('عواكس') || title.contains('انفيرتر')) return Icons.bolt_rounded;
+    if (title.contains('بطاريات')) return Icons.battery_charging_full_rounded;
+    if (title.contains('هياكل')) return Icons.build_circle_rounded;
+    if (title.contains('كوابل') || title.contains('محولات')) return Icons.cable_rounded;
+    return Icons.category_rounded;
   }
 
   String _formatIQD(int amount) {
@@ -219,14 +296,15 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: AppTheme.accentGreen,
-                                            borderRadius: BorderRadius.circular(12),
+                                        if (widget.storeData['is_verified'] == true || widget.storeData['verified'] == true)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.accentGreen,
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: const Text('معتمد 🛡️', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                                           ),
-                                          child: const Text('معتمد 🛡️', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                                        ),
                                       ],
                                     ),
                                     const SizedBox(height: 4),
@@ -304,6 +382,21 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppTheme.darkNavy),
                         ),
                         const SizedBox(height: 12),
+                        if (_isLoadingProducts)
+                          const SizedBox(
+                            height: 95,
+                            child: Center(
+                              child: CircularProgressIndicator(color: AppTheme.primaryGold),
+                            ),
+                          )
+                        else if (_storeCategories.length <= 1)
+                          const SizedBox(
+                            height: 95,
+                            child: Center(
+                              child: Text('لا توجد أقسام بعد', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                            ),
+                          )
+                        else
                         SizedBox(
                           height: 95,
                           child: ListView.builder(
@@ -338,7 +431,7 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
                                           ],
                                         ),
                                         child: Icon(
-                                          cat['icon'] as IconData,
+                                          _getCategoryIcon(cat['title'] as String),
                                           color: isSelected ? Colors.white : AppTheme.darkNavy,
                                           size: 26,
                                         ),
@@ -603,6 +696,7 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
                         id: item['id'] as String,
                         title: item['name'] as String,
                         storeName: storeName,
+                        storeId: widget.storeData['id']?.toString() ?? '',
                         priceIQD: priceValue,
                         qty: 1,
                       );

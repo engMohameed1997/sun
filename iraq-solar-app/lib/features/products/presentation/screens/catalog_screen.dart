@@ -46,54 +46,78 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
 
     if (mounted) {
       setState(() {
+        // Build stores map first for product lookups
+        Map<String, Map<String, dynamic>> storeMap = {};
+        if (storesRes['data'] != null) {
+          List storesList = [];
+          if (storesRes['data'] is Map) {
+            storesList = (storesRes['data'] as Map<String, dynamic>)['stores'] as List? ?? [];
+          } else if (storesRes['data'] is List) {
+            storesList = storesRes['data'] as List;
+          }
+          for (final s in storesList) {
+            final sm = s as Map<String, dynamic>;
+            storeMap[sm['id']?.toString() ?? ''] = sm;
+          }
+          _stores = storesList.map((s) {
+            final sm = s as Map<String, dynamic>;
+            return {
+              'id': sm['id']?.toString() ?? '',
+              'name': sm['name'] ?? 'متجر طاقة معتمد',
+              'rating': '${sm['rating'] ?? 0} ⭐',
+              'city': sm['phone'] ?? '07700000000',
+              'phone': sm['phone'] ?? '07700000000',
+              'verified': sm['is_verified'] ?? true,
+              'productsCount': 35,
+            };
+          }).toList();
+        }
+
         if (productsRes['data'] != null && productsRes['data'] is List) {
           final list = productsRes['data'] as List;
           _crossStoreProducts = list.map((item) {
             final m = item as Map<String, dynamic>;
-            final priceUsd = (m['price_usd'] ?? 0.0).toDouble();
-            final priceRaw = (priceUsd * 1500).toInt();
+            final priceRaw = (m['price_iqd'] ?? 0).toInt();
             final priceFormatted = '${priceRaw.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match match) => '${match[1]},')} د.ع';
+            final rawSpecs = m['specifications'];
+            final specsMap = rawSpecs != null && rawSpecs is Map
+                ? Map<String, dynamic>.from(rawSpecs)
+                : <String, dynamic>{};
+            final warrantyVal = specsMap['الضمان']?.toString() ?? '';
+            final storeId = m['store_id']?.toString() ?? '';
+            final storeInfo = storeMap[storeId];
+            final storeName = storeInfo?['name']?.toString() ?? 'متجر غير محدد';
+            final storeRating = storeInfo?['rating'];
+            final ratingStr = storeRating != null ? '$storeRating ⭐' : '—';
+            final storePhone = storeInfo?['phone']?.toString() ?? '07700000000';
             return {
               'id': m['id']?.toString() ?? '',
               'name': m['name'] ?? '',
-              'brand': m['brand'] ?? 'علامة معتمدة',
-              'store': 'متجر معتمد',
-              'storeName': 'متجر طاقة معتمد',
+              'brand': m['brand_name'] ?? 'علامة معتمدة',
+              'model': m['model'] ?? '',
+              'store': storeName,
+              'store_description': storeInfo?['description'] ?? '',
+              'is_verified': storeInfo?['is_verified'] ?? false,
+              'storeName': storeName,
               'category': m['category_id'] ?? 'منظومات شمسية',
               'price': priceFormatted,
               'priceIQD': priceFormatted,
               'price_iqd': priceRaw,
-              'price_usd': priceUsd,
               'image': 'assets/images/solar_panel_longi.jpg',
-              'rating': '4.9 ⭐',
-              'warranty': '25 سنة كفالة كفاءة وتوليد',
+              'rating': ratingStr,
+              'warranty': warrantyVal,
               'stock': m['stock_quantity'] ?? 50,
               'type': m['type'] ?? 'panel',
-              'specs': m['specifications'] ?? {},
-              'isFeatured': true,
+              'specs': specsMap,
+              'isFeatured': m['is_available'] ?? false,
               'storeData': {
-                'id': m['merchant_id']?.toString() ?? 's1',
-                'name': 'متجر طاقة معتمد',
-                'rating': '4.9 ⭐',
-                'city': 'بغداد / المحافظات',
-                'phone': '07700000000',
+                'id': storeId,
+                'name': storeName,
+                'rating': ratingStr,
+                'city': storePhone,
+                'phone': storePhone,
               },
-              'city': 'بغداد / المحافظات',
-            };
-          }).toList();
-        }
-        if (storesRes['data'] != null && storesRes['data'] is List) {
-          final stores = storesRes['data'] as List;
-          _stores = stores.map((s) {
-            final sm = s as Map<String, dynamic>;
-            return {
-              'id': sm['id']?.toString() ?? '',
-              'name': sm['full_name'] ?? 'متجر طاقة معتمد',
-              'rating': '4.9 ⭐',
-              'city': '${sm['governorate'] ?? 'بغداد'} - ${sm['city'] ?? 'المركز'}',
-              'phone': sm['phone'] ?? '07700000000',
-              'verified': sm['is_verified'] ?? true,
-              'productsCount': 35,
+              'city': storePhone,
             };
           }).toList();
         }
@@ -275,14 +299,15 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
                           ),
                           Row(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.accentGreen.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(10),
+                              if (store['verified'] == true || store['is_verified'] == true)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.accentGreen.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Text('معتمد 🛡️', style: TextStyle(color: AppTheme.accentGreen, fontSize: 10, fontWeight: FontWeight.bold)),
                                 ),
-                                child: const Text('معتمد 🛡️', style: TextStyle(color: AppTheme.accentGreen, fontSize: 10, fontWeight: FontWeight.bold)),
-                              ),
                               IconButton(
                                 constraints: const BoxConstraints(),
                                 padding: const EdgeInsets.only(right: 6),

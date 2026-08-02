@@ -122,7 +122,19 @@ func (s *StoreService) ListStores(ctx context.Context, search string, isVerified
 	}
 	offset := (page - 1) * perPage
 
-	return s.storeRepo.ListStores(ctx, search, isVerified, perPage, offset)
+	stores, total, err := s.storeRepo.ListStores(ctx, search, isVerified, perPage, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	for i := range stores {
+		branches, branchErr := s.storeRepo.ListStoreBranches(ctx, stores[i].ID)
+		if branchErr == nil {
+			stores[i].Branches = branches
+		}
+	}
+
+	return stores, total, nil
 }
 
 func (s *StoreService) UpdateStore(ctx context.Context, id uuid.UUID, req domain.UpdateStoreRequest) error {

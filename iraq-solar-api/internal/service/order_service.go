@@ -38,7 +38,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID uuid.UUID, req do
 		if s.productRepo != nil {
 			product, err := s.productRepo.FindByID(ctx, itemReq.ProductID)
 			if err == nil && product != nil {
-				unitPrice = product.PriceUSD
+				unitPrice = product.PriceIQD
 			}
 		}
 
@@ -50,8 +50,8 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID uuid.UUID, req do
 			OrderID:       orderID,
 			ProductID:     itemReq.ProductID,
 			Quantity:      itemReq.Quantity,
-			UnitPriceUSD:  unitPrice,
-			TotalPriceUSD: itemTotal,
+			UnitPriceIQD:  unitPrice,
+			TotalPriceIQD: itemTotal,
 		})
 	}
 
@@ -64,7 +64,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, userID uuid.UUID, req do
 		ID:              orderID,
 		UserID:          userID,
 		Status:          domain.StatusPending,
-		TotalAmountUSD:  totalAmount,
+		TotalAmountIQD:  totalAmount,
 		ShippingAddress: req.ShippingAddress,
 		PaymentMethod:   paymentMethod,
 		PaymentStatus:   "unpaid",

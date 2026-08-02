@@ -32,7 +32,7 @@ export const DashboardOverview: React.FC = () => {
         } else {
           setStats({
             total_orders: 0,
-            total_revenue_usd: 0,
+            total_revenue_iqd: 0,
             total_users: 1,
             total_products: 0,
             pending_orders: 0,
@@ -107,7 +107,7 @@ export const DashboardOverview: React.FC = () => {
             </div>
           </div>
           <div className="text-2xl font-bold text-slate-100">
-            ${stats?.total_revenue_usd.toLocaleString()} <span className="text-xs text-slate-400 font-normal">USD</span>
+            {stats?.total_revenue_iqd.toLocaleString()} <span className="text-xs text-slate-400 font-normal">د.ع</span>
           </div>
           <div className="text-xs text-emerald-400 flex items-center gap-1 font-medium">
             <TrendingUp size={14} /> +14.2% مقارنة بالشهر السابق

@@ -11,6 +11,7 @@ import { ProductsPage } from './pages/ProductsPage';
 import { StoresPage } from './pages/StoresPage';
 import { UsersPage } from './pages/UsersPage';
 import { BannersPage } from './pages/BannersPage';
+import { GovernoratesPage } from './pages/GovernoratesPage';
 import { CategoriesPage } from './pages/CategoriesPage';
 import { BrandsPage } from './pages/BrandsPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
@@ -105,6 +106,14 @@ export function App() {
               element={
                 <ProtectedRoute>
                   <BannersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/governorates"
+              element={
+                <ProtectedRoute>
+                  <GovernoratesPage />
                 </ProtectedRoute>
               }
             />

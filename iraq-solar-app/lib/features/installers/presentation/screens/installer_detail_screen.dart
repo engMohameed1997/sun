@@ -176,14 +176,15 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: AppTheme.accentGreen,
-                                            borderRadius: BorderRadius.circular(12),
+                                        if (widget.installerData['is_verified'] == true)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.accentGreen,
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: const Text('معتمد 🛡️', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                                           ),
-                                          child: const Text('معتمد 🛡️', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                                        ),
                                       ],
                                     ),
                                     const SizedBox(height: 4),

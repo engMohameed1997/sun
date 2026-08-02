@@ -80,15 +80,21 @@ export const StoresPage: React.FC = () => {
   const openDeliveryFeesModal = async (store: StoreType) => {
     try {
       const res = await api.get(`/admin/stores/${store.id}/delivery-fees`);
-      let feesList: DeliveryFee[] = res.data?.data || [];
-      if (feesList.length === 0) {
-        feesList = [
-          { id: 1, merchant_id: store.merchant_id, store_id: store.id, governorate_id: 1, fee_iqd: 5000, estimated_days: 1, is_active: true, governorate_name_ar: 'بغداد' },
-          { id: 2, merchant_id: store.merchant_id, store_id: store.id, governorate_id: 2, fee_iqd: 15000, estimated_days: 3, is_active: true, governorate_name_ar: 'البصرة' },
-          { id: 3, merchant_id: store.merchant_id, store_id: store.id, governorate_id: 3, fee_iqd: 12000, estimated_days: 2, is_active: true, governorate_name_ar: 'نينوى' },
-          { id: 4, merchant_id: store.merchant_id, store_id: store.id, governorate_id: 4, fee_iqd: 10000, estimated_days: 2, is_active: true, governorate_name_ar: 'أربيل' },
-        ];
-      }
+      const savedFees: DeliveryFee[] = res.data?.data || [];
+      const savedGovIds = new Set(savedFees.map((f) => f.governorate_id));
+      const missing = governorates.filter((g) => !savedGovIds.has(g.id));
+      const defaultFees: DeliveryFee[] = missing.map((g) => ({
+        id: 0,
+        merchant_id: store.merchant_id,
+        store_id: store.id,
+        governorate_id: g.id,
+        fee_iqd: 5000,
+        estimated_days: 2,
+        is_active: true,
+        governorate_name_ar: g.name_ar,
+        governorate_name_en: g.name_en,
+      }));
+      const feesList = [...savedFees, ...defaultFees];
       setSelectedStoreFees({ store, fees: feesList });
     } catch (err) {
       alert('فشل جلب أسعار التوصيل للمتجر');

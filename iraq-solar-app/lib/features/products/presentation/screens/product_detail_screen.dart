@@ -23,7 +23,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final p = widget.product;
     final priceIQDString = p['price'] ?? p['priceIQD'] ?? '175,000 د.ع';
     final imagePath = p['image'] ?? p['assetImage'];
-    final specs = p['specs'] as Map<String, String>?;
+    final specs = p['specs'] as Map<String, dynamic>?;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -166,9 +166,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     if (specs != null && specs.isNotEmpty)
                       ...specs.entries.map((entry) => _buildSpecRow(entry.key, entry.value)).toList()
                     else ...[
-                      _buildSpecRow('الضمان المصنعي:', p['warranty'] ?? '25 سنة كفالة كفاءة وتوليد'),
-                      _buildSpecRow('درجة الحماية:', 'IP68 waterproof مضاد للأتربة والأمطار'),
-                      _buildSpecRow('حالة التوفر:', 'متوفر في مستودع المتجر الرئيسي'),
+                      _buildSpecRow('النوع:', p['type'] ?? 'منتج طاقة شمسية'),
+                      _buildSpecRow('الموديل:', p['model'] ?? '—'),
+                      _buildSpecRow('الماركة:', p['brand'] ?? '—'),
+                      _buildSpecRow('الضمان:', p['warranty'] ?? 'غير محدد'),
                     ],
 
                     const Divider(height: 32),
@@ -198,15 +199,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               children: [
                                 Row(
                                   children: [
-                                    Text(p['store'] as String? ?? 'متجر بغداد للطاقة الشمولية', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.darkNavy)),
-                                    const SizedBox(width: 4),
-                                    const Icon(Icons.verified_rounded, color: Colors.blue, size: 16),
-                                    const SizedBox(width: 2),
-                                    const Text('متجر موثّق', style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold)),
+                                    Text(p['store'] as String? ?? 'متجر غير محدد', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.darkNavy)),
+                                    if (p['is_verified'] == true || p['verified'] == true) ...[
+                                      const SizedBox(width: 4),
+                                      const Icon(Icons.verified_rounded, color: Colors.blue, size: 16),
+                                      const SizedBox(width: 2),
+                                      const Text('متجر موثّق', style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold)),
+                                    ],
                                   ],
                                 ),
                                 const SizedBox(height: 2),
-                                Text('مورد معتمد في العراق • شحن لجميع المحافظات', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                                Text(p['store_description'] as String? ?? '', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
                               ],
                             ),
                           ),
@@ -275,6 +278,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                     id: p['id'] ?? p['name'],
                                     title: p['name'] ?? 'منتج شمسي',
                                     storeName: p['store'] ?? 'متجر طاقة معتمد',
+                                    storeId: p['store_id']?.toString() ?? '',
                                     priceIQD: priceRaw is int ? priceRaw : 175000,
                                     qty: _quantity,
                                   );
@@ -321,7 +325,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  Widget _buildSpecRow(String label, String val) {
+  Widget _buildSpecRow(String label, dynamic val) {
+    final valStr = val?.toString() ?? '—';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Container(
@@ -335,7 +340,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-            Text(val, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.darkNavy)),
+            Text(valStr, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.darkNavy)),
           ],
         ),
       ),

@@ -45,6 +45,7 @@ func main() {
 	storeRepo := repository.NewStoreRepository(dbPool)
 	productRepo := repository.NewProductRepository(dbPool)
 	categoryRepo := repository.NewCategoryRepository(dbPool)
+	brandRepo := repository.NewBrandRepository(dbPool)
 	calcRepo := repository.NewSolarCalculationRepository(dbPool)
 	orderRepo := repository.NewOrderRepository(dbPool)
 	adminRepo := repository.NewAdminRepository(dbPool)
@@ -73,6 +74,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(authService)
 	calcHandler := handler.NewCalculatorHandler(calcService)
 	productHandler := handler.NewProductHandler(productRepo, storeRepo, categoryRepo)
+	brandHandler := handler.NewBrandHandler(brandRepo)
 	orderHandler := handler.NewOrderHandler(orderService)
 	adminHandler := handler.NewAdminHandler(adminService)
 	uploadHandler := handler.NewUploadHandler(minioService)
@@ -142,11 +144,13 @@ func main() {
 
 		// Categories & Public Store Routes
 		v1.GET("/categories", productHandler.ListCategories)
+		v1.GET("/brands", brandHandler.ListBrands)
 		v1.GET("/governorates", adminHandler.ListGovernorates)
 		v1.GET("/banners", adminHandler.ListHomeBanners)
 		// Stores (Public)
 		v1.GET("/stores", storeHandler.ListStores)
 		v1.GET("/stores/:id", storeHandler.GetStore)
+		v1.GET("/stores/:id/delivery-fees", adminHandler.GetStoreDeliveryFees)
 
 		// Public Installers/Engineers Directory
 		v1.GET("/installers", installerHandler.ListInstallers)
@@ -186,10 +190,10 @@ func main() {
 
 			// Wallet Endpoints
 			protected.GET("/wallet/balance", func(c *gin.Context) {
-				utils.SuccessResponse(c, http.StatusOK, "تم جلب رصيد المحفظة الإلكترونية", gin.H{"balance_usd": 1500.00, "currency": "USD"})
+				utils.SuccessResponse(c, http.StatusOK, "تم جلب رصيد المحفظة الإلكترونية", gin.H{"balance_iqd": 1500000.00, "currency": "IQD"})
 			})
 			protected.POST("/wallet/topup", func(c *gin.Context) {
-				utils.SuccessResponse(c, http.StatusOK, "تم شحن المحفظة بنجاح", gin.H{"new_balance_usd": 2000.00})
+				utils.SuccessResponse(c, http.StatusOK, "تم شحن المحفظة بنجاح", gin.H{"new_balance_iqd": 2000000.00})
 			})
 
 			// Merchant Product Management Routes
@@ -267,9 +271,16 @@ func main() {
 				adminOnly.POST("/categories", productHandler.CreateCategory)
 				adminOnly.PUT("/categories/:id", productHandler.UpdateCategory)
 				adminOnly.DELETE("/categories/:id", productHandler.DeleteCategory)
+
+				// Brands
+				adminOnly.GET("/brands", brandHandler.ListBrands)
+				adminOnly.POST("/brands", brandHandler.CreateBrand)
+				adminOnly.PUT("/brands/:id", brandHandler.UpdateBrand)
+				adminOnly.DELETE("/brands/:id", brandHandler.DeleteBrand)
 				
 				// Products
 				adminOnly.GET("/products", adminHandler.ListProducts)
+				adminOnly.POST("/products", productHandler.CreateProduct)
 				adminOnly.GET("/products/low-stock", adminHandler.LowStockProducts)
 				adminOnly.PUT("/products/:id", adminHandler.UpdateProduct)
 				adminOnly.DELETE("/products/:id", adminHandler.DeleteProduct)

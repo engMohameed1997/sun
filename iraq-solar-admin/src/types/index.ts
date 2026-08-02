@@ -71,6 +71,15 @@ export interface Category {
   created_at?: string;
 }
 
+export interface Brand {
+  id: string;
+  name: string;
+  logo_url?: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Product {
   id: string;
   category_id?: number;
@@ -79,10 +88,11 @@ export interface Product {
   branch_id?: string;
   sku: string;
   name: string;
-  brand: string;
+  brand_id?: string;
+  brand_name?: string;
   model: string;
   type: ProductType;
-  price_usd: number;
+  price_iqd: number;
   stock_quantity: number;
   reserved_quantity: number;
   low_stock_threshold: number;
@@ -101,8 +111,8 @@ export interface OrderItem {
   order_id: string;
   product_id: string;
   quantity: number;
-  unit_price_usd: number;
-  total_price_usd: number;
+  unit_price_iqd: number;
+  total_price_iqd: number;
 }
 
 export interface OrderStatusHistory {
@@ -119,7 +129,7 @@ export interface Order {
   id: string;
   user_id: string;
   status: OrderStatus;
-  total_amount_usd: number;
+  total_amount_iqd: number;
   shipping_address: string;
   payment_method: string;
   payment_status: string;
@@ -162,7 +172,7 @@ export interface HomeBanner {
 
 export interface DashboardStats {
   total_orders: number;
-  total_revenue_usd: number;
+  total_revenue_iqd: number;
   total_users: number;
   total_products: number;
   pending_orders: number;

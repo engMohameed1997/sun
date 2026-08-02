@@ -42,7 +42,7 @@ func setupTestRouter() (*gin.Engine, *service.AuthService) {
 
 	authHandler := handler.NewAuthHandler(authService)
 	calcHandler := handler.NewCalculatorHandler(calcService)
-	productHandler := handler.NewProductHandler(productRepo)
+	productHandler := handler.NewProductHandler(productRepo, nil, nil)
 
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "healthy", "service": "iraq-solar-api"})
@@ -77,7 +77,7 @@ func setupTestRouter() (*gin.Engine, *service.AuthService) {
 					c.JSON(http.StatusOK, gin.H{
 						"success":           true,
 						"total_orders":      142,
-						"total_revenue_usd": 185400.00,
+						"total_revenue_iqd": 185400000.00,
 					})
 				})
 			}

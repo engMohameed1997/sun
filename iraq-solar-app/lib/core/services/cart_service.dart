@@ -4,6 +4,7 @@ class CartItem {
   final String id;
   final String title;
   final String storeName;
+  final String storeId;
   final int priceIQD;
   int qty;
 
@@ -11,6 +12,7 @@ class CartItem {
     required this.id,
     required this.title,
     required this.storeName,
+    required this.storeId,
     required this.priceIQD,
     this.qty = 1,
   });
@@ -20,29 +22,7 @@ class CartService {
   static final CartService instance = CartService._internal();
   CartService._internal();
 
-  final List<CartItem> _items = [
-    CartItem(
-      id: 'p1',
-      title: 'لوح طاقة شمسية LONGi 550W N-Type TOPCon',
-      storeName: 'متجر بغداد للطاقة الشمولية',
-      priceIQD: 175000,
-      qty: 10,
-    ),
-    CartItem(
-      id: 'p2',
-      title: 'انفيرتر هجين Deye 8kW Three Phase 48V',
-      storeName: 'دجلة للحلول الشمسية الهجينة',
-      priceIQD: 1875000,
-      qty: 1,
-    ),
-    CartItem(
-      id: 'p3',
-      title: 'بطارية ليثيوم Felicity 10.2kWh LiFePO4',
-      storeName: 'البصرة سولار تك المعتمد',
-      priceIQD: 2175000,
-      qty: 1,
-    ),
-  ];
+  final List<CartItem> _items = [];
 
   final ValueNotifier<int> cartChangeNotifier = ValueNotifier<int>(0);
 
@@ -69,6 +49,7 @@ class CartService {
     required String id,
     required String title,
     required String storeName,
+    required String storeId,
     required int priceIQD,
     int qty = 1,
   }) {
@@ -81,6 +62,7 @@ class CartService {
           id: id,
           title: title,
           storeName: storeName,
+          storeId: storeId,
           priceIQD: priceIQD,
           qty: qty,
         ),

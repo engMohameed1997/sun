@@ -29,7 +29,7 @@ type Product struct {
 	BrandID           *uuid.UUID      `db:"brand_id" json:"brand_id,omitempty"`
 	Model             string          `db:"model" json:"model"`
 	Type              ProductType     `db:"type" json:"type"`
-	PriceUSD          float64         `db:"price_usd" json:"price_usd"`
+	PriceIQD          float64         `db:"price_iqd" json:"price_iqd"`
 	StockQuantity     int             `db:"stock_quantity" json:"stock_quantity"`
 	ReservedQuantity  int             `db:"reserved_quantity" json:"reserved_quantity"`
 	LowStockThreshold int             `db:"low_stock_threshold" json:"low_stock_threshold"`
@@ -61,7 +61,7 @@ type UpdateProductRequest struct {
 	BrandID           *uuid.UUID      `json:"brand_id"`
 	Model             string          `json:"model"`
 	Type              ProductType     `json:"type"`
-	PriceUSD          float64         `json:"price_usd"`
+	PriceIQD          float64         `json:"price_iqd"`
 	StockQuantity     *int            `json:"stock_quantity"`
 	LowStockThreshold *int            `json:"low_stock_threshold"`
 	Specifications    json.RawMessage `json:"specifications"`
@@ -78,7 +78,7 @@ type CreateProductRequest struct {
 	BrandID           *uuid.UUID      `json:"brand_id" binding:"required"`
 	Model             string          `json:"model" binding:"required"`
 	Type              ProductType     `json:"type" binding:"required"`
-	PriceUSD          float64         `json:"price_usd" binding:"required,gt=0"`
+	PriceIQD          float64         `json:"price_iqd" binding:"required,gt=0"`
 	StockQuantity     int             `json:"stock_quantity" binding:"gte=0"`
 	LowStockThreshold int             `json:"low_stock_threshold"`
 	Specifications    json.RawMessage `json:"specifications"`

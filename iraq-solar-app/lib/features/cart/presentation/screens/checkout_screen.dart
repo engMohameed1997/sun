@@ -15,32 +15,19 @@ class CheckoutScreen extends StatefulWidget {
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
   // User Registration & Profile Data
-  final TextEditingController _fullNameController = TextEditingController(text: 'محمد علي حسين العبيدي');
-  final TextEditingController _phoneController = TextEditingController(text: '07701234567');
-  final TextEditingController _districtController = TextEditingController(text: 'حي الكرادة - شارع 14 محلة 903 (قرب ساحة الواثق)');
+  final TextEditingController _fullNameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _districtController = TextEditingController();
 
-  // Governorate Selection & Merchant Delivery Fees Map (بالدينار العراقي)
-  String _selectedGovernorate = 'بغداد';
-  final Map<String, int> _governorateDeliveryFees = {
-    'بغداد': 15000,
-    'البصرة': 35000,
-    'أربيل': 30000,
-    'النجف الأشرف': 20000,
-    'كربلاء المقدسة': 20000,
-    'نينوى (الموصل)': 35000,
-    'كركوك': 30000,
-    'ذي قار': 25000,
-    'بابل': 20000,
-    'السليمانية': 30000,
-    'دهوك': 35000,
-    'الانبار': 25000,
-    'ديالى': 20000,
-    'ميسان': 25000,
-    'المثنى': 25000,
-    'القادسية': 20000,
-    'واسط': 20000,
-    'صلاح الدين': 30000,
-  };
+  // Governorate Selection & Delivery Fees (fetched from API per store)
+  String _selectedGovernorate = '';
+  int _selectedGovernorateId = 0;
+  List<Map<String, dynamic>> _governorates = [];
+  bool _isLoadingFees = true;
+  // Map: governorate_id -> total delivery fee (summed across all stores in cart)
+  final Map<int, int> _governorateDeliveryFees = {};
+  // Map: governorate_id -> governorate_name_ar
+  final Map<int, String> _governorateNames = {};
 
   // Payment Method
   String _selectedPaymentMethod = 'cash_on_delivery';
@@ -52,7 +39,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String? _couponStatusMessage;
 
   int get _subtotalIQD => CartService.instance.subtotalIQD;
-  int get _deliveryIQD => _governorateDeliveryFees[_selectedGovernorate] ?? 25000;
+  int get _deliveryIQD => _governorateDeliveryFees[_selectedGovernorateId] ?? 25000;
 
   int get _totalIQD {
     int total = _subtotalIQD + _deliveryIQD - _couponDiscountIQD;
@@ -89,13 +76,63 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _fetchGovernoratesAndFees();
+  }
+
+  Future<void> _fetchGovernoratesAndFees() async {
+    setState(() => _isLoadingFees = true);
+    try {
+      final govRes = await ApiClient.getGovernorates();
+      if (govRes['success'] == true && govRes['data'] != null) {
+        final List<dynamic> govList = govRes['data'];
+        _governorates = govList.cast<Map<String, dynamic>>();
+        for (var g in _governorates) {
+          _governorateNames[g['id'] as int] = g['name_ar'] as String;
+        }
+        if (_governorates.isNotEmpty) {
+          _selectedGovernorateId = _governorates.first['id'] as int;
+          _selectedGovernorate = _governorates.first['name_ar'] as String;
+        }
+      }
+
+      // Fetch delivery fees for each unique store in the cart
+      final storeIds = <String>{};
+      for (var item in CartService.instance.items) {
+        storeIds.add(item.storeId);
+      }
+
+      _governorateDeliveryFees.clear();
+      for (var storeId in storeIds) {
+        final feeRes = await ApiClient.getStoreDeliveryFees(storeId);
+        if (feeRes['success'] == true && feeRes['data'] != null) {
+          final List<dynamic> fees = feeRes['data'];
+          for (var fee in fees) {
+            final govId = fee['governorate_id'] as int;
+            final feeIqd = (fee['fee_iqd'] as num).toDouble();
+            final isActive = fee['is_active'] as bool? ?? true;
+            if (isActive) {
+              _governorateDeliveryFees[govId] = (_governorateDeliveryFees[govId] ?? 0) + feeIqd.toInt();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error fetching delivery fees: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingFees = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: AppTheme.backgroundLight,
         appBar: AppBar(
-          title: const Text('إكمال الشراء والتوصيل 🚚'),
+          title: const Text('إكمال الشراء والتوصيل'),
           backgroundColor: AppTheme.darkNavy,
         ),
         body: SingleChildScrollView(
@@ -176,19 +213,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         prefixIcon: Icon(Icons.map_rounded, color: AppTheme.primaryGold),
                       ),
                       child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedGovernorate,
+                        child: DropdownButton<int>(
+                          value: _selectedGovernorateId,
                           isExpanded: true,
                           isDense: true,
-                          items: _governorateDeliveryFees.keys.map((gov) {
-                            final fee = _governorateDeliveryFees[gov];
-                            return DropdownMenuItem<String>(
-                              value: gov,
+                          hint: _isLoadingFees
+                              ? const Text('جارٍ تحميل المحافظات...')
+                              : const Text('اختر المحافظة'),
+                          items: _governorates.map((g) {
+                            final govId = g['id'] as int;
+                            final govName = g['name_ar'] as String;
+                            final fee = _governorateDeliveryFees[govId] ?? 25000;
+                            return DropdownMenuItem<int>(
+                              value: govId,
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(gov, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.darkNavy)),
-                                  Text('التوصيل: ${_formatIQD(fee!)}', style: const TextStyle(color: AppTheme.primaryGold, fontSize: 11, fontWeight: FontWeight.bold)),
+                                  Text(govName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.darkNavy)),
+                                  Text('التوصيل: ${_formatIQD(fee)}', style: const TextStyle(color: AppTheme.primaryGold, fontSize: 11, fontWeight: FontWeight.bold)),
                                 ],
                               ),
                             );
@@ -196,7 +238,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           onChanged: (val) {
                             if (val != null) {
                               setState(() {
-                                _selectedGovernorate = val;
+                                _selectedGovernorateId = val;
+                                _selectedGovernorate = _governorateNames[val] ?? '';
                                 if (_appliedCouponCode == 'FREEINSPECT') {
                                   _couponDiscountIQD = _deliveryIQD;
                                 }
@@ -396,7 +439,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             await ApiClient.createOrder(token, orderData);
                           }
 
-                          final createdOrderId = '#IQ-2026-${(1000 + (DateTime.now().millisecondsSinceEpoch % 8999))}';
+                          final createdOrderId = '#IQ-${DateTime.now().year}-${(1000 + (DateTime.now().millisecondsSinceEpoch % 8999))}';
                           CartService.instance.clearCart();
 
                           if (!mounted) return;
@@ -432,17 +475,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Widget _buildPaymentRadio(String value, String label, IconData icon) {
-    return RadioListTile<String>(
-      value: value,
-      groupValue: _selectedPaymentMethod,
-      onChanged: (val) => setState(() => _selectedPaymentMethod = val!),
-      activeColor: AppTheme.primaryGold,
-      title: Row(
-        children: [
-          Icon(icon, color: AppTheme.darkNavy, size: 20),
-          const SizedBox(width: 10),
-          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.darkNavy))),
-        ],
+    return Material(
+      color: Colors.transparent,
+      child: RadioListTile<String>(
+        value: value,
+        groupValue: _selectedPaymentMethod,
+        onChanged: (val) => setState(() => _selectedPaymentMethod = val!),
+        activeColor: AppTheme.primaryGold,
+        title: Row(
+          children: [
+            Icon(icon, color: AppTheme.darkNavy, size: 20),
+            const SizedBox(width: 10),
+            Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.darkNavy))),
+          ],
+        ),
       ),
     );
   }
