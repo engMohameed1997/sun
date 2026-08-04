@@ -12,9 +12,9 @@ import (
 )
 
 type AdminService struct {
-	adminRepo       *repository.AdminRepository
-	governorateRepo *repository.GovernorateRepository
-	bannerRepo      *repository.BannerRepository
+	adminRepo        *repository.AdminRepository
+	governorateRepo  *repository.GovernorateRepository
+	bannerRepo       *repository.BannerRepository
 	notificationRepo *repository.NotificationRepository
 }
 
@@ -25,9 +25,9 @@ func NewAdminService(
 	notificationRepo *repository.NotificationRepository,
 ) *AdminService {
 	return &AdminService{
-		adminRepo:       adminRepo,
-		governorateRepo: governorateRepo,
-		bannerRepo:      bannerRepo,
+		adminRepo:        adminRepo,
+		governorateRepo:  governorateRepo,
+		bannerRepo:       bannerRepo,
 		notificationRepo: notificationRepo,
 	}
 }
@@ -66,7 +66,7 @@ func (s *AdminService) GetUser(ctx context.Context, id uuid.UUID) (*domain.User,
 	return s.adminRepo.GetUserByID(ctx, id)
 }
 
-func (s *AdminService) CreateUserByAdmin(ctx context.Context, adminID uuid.UUID, fullName, email, phone, password string, role domain.Role, governorate, city string) (*domain.User, error) {
+func (s *AdminService) CreateUserByAdmin(ctx context.Context, adminID uuid.UUID, fullName, phone, password string, role domain.Role, governorate, city string) (*domain.User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -77,7 +77,6 @@ func (s *AdminService) CreateUserByAdmin(ctx context.Context, adminID uuid.UUID,
 	user := &domain.User{
 		ID:           userID,
 		FullName:     fullName,
-		Email:        email,
 		Phone:        phone,
 		PasswordHash: string(hashedPassword),
 		Role:         role,
@@ -179,6 +178,10 @@ func (s *AdminService) DeleteProduct(ctx context.Context, adminID uuid.UUID, id 
 
 func (s *AdminService) ListGovernorates(ctx context.Context) ([]domain.Governorate, error) {
 	return s.governorateRepo.List(ctx)
+}
+
+func (s *AdminService) ListDistrictsByGovernorate(ctx context.Context, govID int) ([]domain.District, error) {
+	return s.governorateRepo.ListDistrictsByGovernorate(ctx, govID)
 }
 
 func (s *AdminService) CreateGovernorate(ctx context.Context, adminID uuid.UUID, nameAr, nameEn string) (*domain.Governorate, error) {
@@ -312,4 +315,3 @@ func (s *AdminService) GetLowStockProducts(ctx context.Context) ([]domain.Produc
 func (s *AdminService) GetOrderHistory(ctx context.Context, orderID uuid.UUID) ([]domain.OrderStatusHistory, error) {
 	return s.adminRepo.GetOrderHistory(ctx, orderID)
 }
-

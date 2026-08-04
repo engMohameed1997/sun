@@ -8,7 +8,6 @@ import (
 // Unit test for audit log payload redaction logic
 func TestSanitizePayload(t *testing.T) {
 	input := map[string]interface{}{
-		"email":        "user@example.com",
 		"password":     "Secret123!",
 		"api_key":      "sk_live_123456",
 		"access_token": "jwt.token.val",

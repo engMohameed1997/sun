@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sun, Lock, Mail, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Sun, Lock, AlertCircle, ArrowLeft, Phone } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 
 export const LoginPage: React.FC = () => {
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -18,7 +17,7 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
-      const res = await api.post('/auth/login', { email, password });
+      const res = await api.post('/auth/login', { Phone, password });
       const { token, user } = res.data.data || res.data;
       if (!['admin', 'merchant'].includes(user.role)) {
         setError('حسابك غير مصرح له بالدخول لـ Admin Dashboard');
@@ -57,22 +56,6 @@ export const LoginPage: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div dir="ltr">
-            <label className="block text-xs font-semibold text-slate-300 mb-2">البريد الإلكتروني</label>
-            <div className="relative">
-              <input
-                type="email"
-                required
-                dir="ltr"
-                value={email}
-                onChange={(e) => setEmail(e.target.value.replace(/\u200F/g, ''))}
-                placeholder="admin@iraqsolar.iq"
-                className="w-full bg-slate-950/70 border border-slate-800 rounded-xl px-4 py-3 pl-10 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 transition text-left"
-              />
-              <Mail size={18} className="absolute left-3 top-3.5 text-slate-500" />
-            </div>
-          </div>
-
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-2">كلمة المرور</label>
             <div className="relative">

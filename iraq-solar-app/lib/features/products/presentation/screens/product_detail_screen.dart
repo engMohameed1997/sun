@@ -305,7 +305,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                   Icon(_isAddedToCart ? Icons.shopping_bag_rounded : Icons.add_shopping_cart_rounded, color: Colors.white, size: 20),
                                   const SizedBox(width: 8),
                                   Text(
-                                    _isAddedToCart ? 'إكمال الشراء (عرض السلة) 🛒' : 'إضافة إلى السلة',
+                                    _isAddedToCart ? 'السلة' : 'إضافة إلى السلة',
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                   ),
                                 ],

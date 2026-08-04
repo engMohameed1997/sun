@@ -60,12 +60,10 @@ func setupTestRouter() (*gin.Engine, *service.AuthService) {
 		{
 			protected.GET("/user/profile", func(c *gin.Context) {
 				userID, _ := c.Get("user_id")
-				email, _ := c.Get("email")
 				role, _ := c.Get("role")
 				c.JSON(http.StatusOK, gin.H{
 					"success": true,
 					"user_id": userID,
-					"email":   email,
 					"role":    role,
 				})
 			})
@@ -108,7 +106,6 @@ func main() {
 	// 2. Test User Registration Endpoint
 	regBody, _ := json.Marshal(domain.RegisterRequest{
 		FullName:    "أحمد علي - مهندس طاقة",
-		Email:       "ahmed.engineer@iraqsolar.iq",
 		Phone:       "+9647712345678",
 		Password:    "SecurePass123!",
 		Governorate: "Baghdad",
@@ -139,7 +136,7 @@ func main() {
 
 	// 3. Test User Login Endpoint
 	loginBody, _ := json.Marshal(domain.LoginRequest{
-		Email:    "ahmed.engineer@iraqsolar.iq",
+		Phone:    "+9647712345678",
 		Password: "SecurePass123!",
 	})
 	w = httptest.NewRecorder()
@@ -231,7 +228,7 @@ func main() {
 	// 9. Test Admin Stats Endpoint (With Generated Admin Token)
 	adminUser := &domain.User{
 		ID:    domain.User{}.ID,
-		Email: "admin@iraqsolar.iq",
+		Phone: "07700000000",
 		Role:  domain.RoleAdmin,
 	}
 	adminToken, _, _ := authService.GenerateToken(adminUser)

@@ -9,14 +9,13 @@ export const StoresPage: React.FC = () => {
   const [governorates, setGovernorates] = useState<Governorate[]>([]);
   const [selectedStoreFees, setSelectedStoreFees] = useState<{ store: StoreType; fees: DeliveryFee[] } | null>(null);
   const [updatingFee, setUpdatingFee] = useState(false);
-  
+
   const [isAddStoreModalOpen, setIsAddStoreModalOpen] = useState(false);
   const [newStore, setNewStore] = useState({
     merchant_id: '',
     name: '',
     slug: '',
     phone: '',
-    email: '',
     description: '',
     logo_url: '',
     cover_url: '',
@@ -139,7 +138,6 @@ export const StoresPage: React.FC = () => {
         name: newStore.name,
         slug: newStore.slug,
         phone: newStore.phone,
-        email: newStore.email,
         description: newStore.description,
         logo_url: newStore.logo_url,
         cover_url: newStore.cover_url,
@@ -160,7 +158,7 @@ export const StoresPage: React.FC = () => {
 
       alert('تم إنشاء المتجر والفرع بنجاح');
       setIsAddStoreModalOpen(false);
-      setNewStore({ merchant_id: '', name: '', slug: '', phone: '', email: '', description: '', logo_url: '', cover_url: '', governorate_id: '', city: '', address: '' });
+      setNewStore({ merchant_id: '', name: '', slug: '', phone: '', description: '', logo_url: '', cover_url: '', governorate_id: '', city: '', address: '' });
       fetchStores();
     } catch (err: any) {
       alert(err.response?.data?.message || 'فشل إنشاء المتجر');
@@ -207,7 +205,7 @@ export const StoresPage: React.FC = () => {
                       )}
                     </h3>
                     <div className="text-xs text-slate-400 mt-1 line-clamp-1">{s.description || 'لا يوجد وصف'}</div>
-                    
+
                     {s.branches && s.branches.length > 0 && (
                       <div className="mt-2 flex items-center gap-1 text-[10px] text-amber-500 bg-amber-500/10 px-2 py-1 rounded-lg w-fit">
                         <MapPin size={10} />
@@ -220,10 +218,6 @@ export const StoresPage: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2 bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 text-xs">
                 <div>
-                  <span className="text-slate-500 block text-[10px]">البريد</span>
-                  <span className="text-slate-300 font-medium">{s.email || '-'}</span>
-                </div>
-                <div>
                   <span className="text-slate-500 block text-[10px]">الهاتف</span>
                   <span className="text-slate-300 font-mono">{s.phone || '-'}</span>
                 </div>
@@ -233,11 +227,10 @@ export const StoresPage: React.FC = () => {
             <div className="flex items-center justify-between pt-2 border-t border-slate-800/60 mt-4">
               <button
                 onClick={() => handleToggleVerification(s.id, !!s.is_verified)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                  s.is_verified
-                    ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20'
-                    : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
-                }`}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${s.is_verified
+                  ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20'
+                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
+                  }`}
               >
                 {s.is_verified ? <XCircle size={14} /> : <CheckCircle2 size={14} />}
                 {s.is_verified ? 'إلغاء التوثيق' : 'منح التوثيق ✔'}
@@ -266,11 +259,11 @@ export const StoresPage: React.FC = () => {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-slate-100 mb-4">إنشاء متجر جديد وفرع رئيسي</h2>
             <form onSubmit={handleCreateStore} className="space-y-6">
-              
+
               {/* Section 1: Store Main Info */}
               <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-4">
                 <h3 className="text-sm font-bold text-amber-500 border-b border-slate-800 pb-2">1. معلومات المتجر الأساسية</h3>
-                
+
                 <div>
                   <label className="block text-slate-400 text-xs mb-1">صاحب المتجر (التاجر) *</label>
                   <select
@@ -361,16 +354,6 @@ export const StoresPage: React.FC = () => {
                       value={newStore.phone}
                       onChange={(e) => setNewStore({ ...newStore, phone: e.target.value })}
                       placeholder="07..."
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-slate-200 outline-none focus:border-amber-500/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-400 text-xs mb-1">البريد الإلكتروني العام</label>
-                    <input
-                      type="email"
-                      value={newStore.email}
-                      onChange={(e) => setNewStore({ ...newStore, email: e.target.value })}
-                      placeholder="info@store.com"
                       className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-slate-200 outline-none focus:border-amber-500/50"
                     />
                   </div>

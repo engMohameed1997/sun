@@ -80,10 +80,6 @@ func (s *StoreService) CreateStore(ctx context.Context, req domain.CreateStoreRe
 	if req.Phone != "" {
 		store.Phone = &req.Phone
 	}
-	if req.Email != "" {
-		store.Email = &req.Email
-	}
-
 	if err := s.storeRepo.CreateStore(ctx, store); err != nil {
 		return nil, fmt.Errorf("failed to create store: %w", err)
 	}

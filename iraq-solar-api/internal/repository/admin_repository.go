@@ -26,10 +26,10 @@ type StatusCount struct {
 }
 
 type TopProduct struct {
-	ID       uuid.UUID `db:"id" json:"id"`
-	Name     string    `db:"name" json:"name"`
-	Sales    int       `db:"sales" json:"sales"`
-	Revenue  float64   `db:"revenue" json:"revenue"`
+	ID      uuid.UUID `db:"id" json:"id"`
+	Name    string    `db:"name" json:"name"`
+	Sales   int       `db:"sales" json:"sales"`
+	Revenue float64   `db:"revenue" json:"revenue"`
 }
 
 type OrderWithUser struct {
@@ -43,7 +43,6 @@ type OrderWithUser struct {
 	CreatedAt       time.Time          `db:"created_at" json:"created_at"`
 	UpdatedAt       time.Time          `db:"updated_at" json:"updated_at"`
 	CustomerName    string             `db:"customer_name" json:"customer_name"`
-	CustomerEmail   string             `db:"customer_email" json:"customer_email"`
 	CustomerPhone   string             `db:"customer_phone" json:"customer_phone"`
 	Items           []domain.OrderItem `json:"items,omitempty"`
 }
@@ -103,7 +102,7 @@ func (r *AdminRepository) ListUsers(ctx context.Context, role, status, governora
 			if governorate != "" && u.Governorate != governorate {
 				continue
 			}
-			if search != "" && !strings.Contains(strings.ToLower(u.FullName), strings.ToLower(search)) && !strings.Contains(strings.ToLower(u.Email), strings.ToLower(search)) {
+			if search != "" && !strings.Contains(strings.ToLower(u.FullName), strings.ToLower(search)) && !strings.Contains(strings.ToLower(u.Phone), strings.ToLower(search)) {
 				continue
 			}
 			filtered = append(filtered, u)
@@ -136,7 +135,7 @@ func (r *AdminRepository) ListUsers(ctx context.Context, role, status, governora
 		argIdx++
 	}
 	if search != "" {
-		where = append(where, fmt.Sprintf("(full_name ILIKE $%d OR email ILIKE $%d)", argIdx, argIdx))
+		where = append(where, fmt.Sprintf("(full_name ILIKE $%d OR phone ILIKE $%d)", argIdx, argIdx))
 		args = append(args, "%"+search+"%")
 		argIdx++
 	}
@@ -147,7 +146,7 @@ func (r *AdminRepository) ListUsers(ctx context.Context, role, status, governora
 	var total int
 	r.db.GetContext(ctx, &total, countQuery, args...)
 
-	query := fmt.Sprintf(`SELECT id, full_name, COALESCE(email, '') AS email, COALESCE(phone, '') AS phone, role, COALESCE(governorate, '') AS governorate, COALESCE(city, '') AS city, is_active, created_at, updated_at 
+	query := fmt.Sprintf(`SELECT id, full_name, COALESCE(phone, '') AS phone, role, COALESCE(governorate, '') AS governorate, COALESCE(city, '') AS city, is_active, created_at, updated_at 
 		FROM users WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, whereClause, argIdx, argIdx+1)
 	args = append(args, perPage, offset)
 
@@ -170,7 +169,7 @@ func (r *AdminRepository) GetUserByID(ctx context.Context, id uuid.UUID) (*domai
 		return nil, nil
 	}
 	var user domain.User
-	err := r.db.GetContext(ctx, &user, `SELECT id, full_name, COALESCE(email, '') AS email, COALESCE(phone, '') AS phone, role, COALESCE(governorate, '') AS governorate, COALESCE(city, '') AS city, is_active, created_at, updated_at 
+	err := r.db.GetContext(ctx, &user, `SELECT id, full_name, COALESCE(phone, '') AS phone, role, COALESCE(governorate, '') AS governorate, COALESCE(city, '') AS city, is_active, created_at, updated_at 
 		FROM users WHERE id = $1 AND deleted_at IS NULL`, id)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -186,9 +185,9 @@ func (r *AdminRepository) CreateUserByAdmin(ctx context.Context, user *domain.Us
 	if r.db == nil {
 		return nil
 	}
-	query := `INSERT INTO users (id, full_name, email, phone, password_hash, role, governorate, city, is_active, created_at, updated_at)
-		VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6, $7, $8, $9, $10, $11)`
-	_, err := r.db.ExecContext(ctx, query, user.ID, user.FullName, user.Email, user.Phone,
+	query := `INSERT INTO users (id, full_name, phone, password_hash, role, governorate, city, is_active, created_at, updated_at)
+		VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9, $10)`
+	_, err := r.db.ExecContext(ctx, query, user.ID, user.FullName, user.Phone,
 		user.PasswordHash, user.Role, user.Governorate, user.City, user.IsActive, user.CreatedAt, user.UpdatedAt)
 	return err
 }
@@ -365,7 +364,7 @@ func (r *AdminRepository) ListAllOrders(ctx context.Context, status, search stri
 	r.db.GetContext(ctx, &total, fmt.Sprintf("SELECT COUNT(*) FROM orders o JOIN users u ON o.user_id=u.id WHERE %s", whereClause), args...)
 
 	query := fmt.Sprintf(`SELECT o.id, o.user_id, o.status, o.total_amount_iqd, o.shipping_address, o.payment_method, 
-		o.payment_status, o.created_at, o.updated_at, u.full_name as customer_name, u.email as customer_email, u.phone as customer_phone
+		o.payment_status, o.created_at, o.updated_at, u.full_name as customer_name, u.phone as customer_phone
 		FROM orders o JOIN users u ON o.user_id=u.id WHERE %s ORDER BY o.created_at DESC LIMIT $%d OFFSET $%d`,
 		whereClause, argIdx, argIdx+1)
 	args = append(args, perPage, offset)
@@ -381,7 +380,7 @@ func (r *AdminRepository) GetOrderDetail(ctx context.Context, id uuid.UUID) (*Or
 	}
 	var order OrderWithUser
 	err := r.db.GetContext(ctx, &order, `SELECT o.id, o.user_id, o.status, o.total_amount_iqd, o.shipping_address, o.payment_method,
-		o.payment_status, o.created_at, o.updated_at, u.full_name as customer_name, u.email as customer_email, u.phone as customer_phone
+		o.payment_status, o.created_at, o.updated_at, u.full_name as customer_name, u.phone as customer_phone
 		FROM orders o JOIN users u ON o.user_id=u.id WHERE o.id=$1`, id)
 	if err != nil {
 		return nil, nil, err
@@ -667,4 +666,3 @@ func (r *AdminRepository) UpsertSetting(ctx context.Context, key, value string) 
 		ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()`, key, value)
 	return err
 }
-

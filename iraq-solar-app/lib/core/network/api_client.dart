@@ -8,6 +8,7 @@ class ApiClient {
 
   static Future<Map<String, String>> headersAsync([String? token]) async {
     final activeToken = token ?? await AuthStorageService.getToken();
+    final refreshToken = await AuthStorageService.getRefreshToken();
     final map = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -15,10 +16,13 @@ class ApiClient {
     if (activeToken != null && activeToken.isNotEmpty) {
       map['Authorization'] = 'Bearer $activeToken';
     }
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      map['X-Refresh-Token'] = refreshToken;
+    }
     return map;
   }
 
-  static Map<String, String> headers([String? token]) {
+  static Map<String, String> headers([String? token, String? refreshToken]) {
     final map = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -26,7 +30,42 @@ class ApiClient {
     if (token != null && token.isNotEmpty) {
       map['Authorization'] = 'Bearer $token';
     }
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      map['X-Refresh-Token'] = refreshToken;
+    }
     return map;
+  }
+
+  static Future<bool> refreshTokenApi() async {
+    final currentRefreshToken = await AuthStorageService.getRefreshToken();
+    if (currentRefreshToken == null || currentRefreshToken.isEmpty) return false;
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/refresh'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Refresh-Token': currentRefreshToken,
+        },
+        body: jsonEncode({'refresh_token': currentRefreshToken}),
+      );
+
+      if (response.statusCode == 200) {
+        final res = jsonDecode(response.body);
+        if (res['success'] == true && res['data'] != null) {
+          final data = res['data'];
+          if (data['token'] != null) {
+            await AuthStorageService.saveToken(data['token'].toString());
+          }
+          if (data['refresh_token'] != null) {
+            await AuthStorageService.saveRefreshToken(data['refresh_token'].toString());
+          }
+          return true;
+        }
+      }
+    } catch (_) {}
+    return false;
   }
 
   // 1. Health Check
@@ -45,26 +84,32 @@ class ApiClient {
   // 2. Auth: Register
   static Future<Map<String, dynamic>> registerUser({
     required String fullName,
-    required String email,
     required String phone,
     required String password,
     required String role,
+    int? governorateId,
+    int? districtId,
     String? governorate,
     String? city,
+    String? landmark,
   }) async {
     try {
+      final payload = <String, dynamic>{
+        'full_name': fullName,
+        'phone': phone,
+        'password': password,
+        'role': role,
+      };
+      if (governorateId != null) payload['governorate_id'] = governorateId;
+      if (districtId != null) payload['district_id'] = districtId;
+      if (governorate != null && governorate.isNotEmpty) payload['governorate'] = governorate;
+      if (city != null && city.isNotEmpty) payload['city'] = city;
+      if (landmark != null && landmark.isNotEmpty) payload['landmark'] = landmark;
+
       final response = await http.post(
         Uri.parse('$baseUrl/auth/register'),
         headers: headers(),
-        body: jsonEncode({
-          'full_name': fullName,
-          'email': email,
-          'phone': phone,
-          'password': password,
-          'role': role,
-          'governorate': governorate ?? 'Baghdad',
-          'city': city ?? 'Karrada',
-        }),
+        body: jsonEncode(payload),
       );
 
       return jsonDecode(response.body);
@@ -75,17 +120,20 @@ class ApiClient {
 
   // 3. Auth: Login
   static Future<Map<String, dynamic>> loginUser({
-    required String email,
+    String? phone,
     required String password,
   }) async {
     try {
+      final payload = <String, dynamic>{
+        'password': password,
+      };
+      if (phone != null && phone.isNotEmpty) {
+        payload['phone'] = phone;
+      }
       final response = await http.post(
         Uri.parse('$baseUrl/auth/login'),
         headers: headers(),
-        body: jsonEncode({
-          'email': email,
-          'password': password,
-        }),
+        body: jsonEncode(payload),
       );
 
       return jsonDecode(response.body);
@@ -94,7 +142,7 @@ class ApiClient {
     }
   }
 
-  // 4. Orders: Create Order
+  // 4. Orders: Create Order (correct payload for Go backend)
   static Future<Map<String, dynamic>> createOrder(String token, Map<String, dynamic> orderData) async {
     try {
       final response = await http.post(
@@ -118,6 +166,32 @@ class ApiClient {
       return jsonDecode(response.body);
     } catch (e) {
       return {'success': false, 'message': 'فشل جلب الطلبات: $e'};
+    }
+  }
+
+  // 5b. Orders: Get Single Order by ID (with full relations)
+  static Future<Map<String, dynamic>> getOrderById(String token, String orderId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/orders/$orderId'),
+        headers: headers(token),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب تفاصيل الطلب: $e'};
+    }
+  }
+
+  // 5c. Orders: Cancel an Order
+  static Future<Map<String, dynamic>> cancelOrder(String token, String orderId) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('$baseUrl/orders/$orderId'),
+        headers: headers(token),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل إلغاء الطلب: $e'};
     }
   }
 
@@ -663,6 +737,16 @@ class ApiClient {
       return jsonDecode(response.body);
     } catch (e) {
       return {'success': false, 'message': 'فشل جلب أسعار التوصيل: $e'};
+    }
+  }
+
+  // 22. Districts List (Public)
+  static Future<Map<String, dynamic>> getDistricts(int governorateId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/governorates/$governorateId/districts'), headers: headers());
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب الأقضية والنواحي: $e'};
     }
   }
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../../core/services/auth_storage.dart';
+import '../../../../core/services/auth_guard.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
+import '../../../auth/presentation/screens/login_screen.dart';
 import 'edit_profile_screen.dart';
 import 'saved_calculations_screen.dart';
 import 'my_orders_history_screen.dart';
@@ -20,8 +22,9 @@ class SolarProfileScreen extends StatefulWidget {
 class _SolarProfileScreenState extends State<SolarProfileScreen> {
   String _userRole = 'زبون معتمد';
   String _userName = '';
-  String _userEmail = '';
+  String _userPhone = '';
   bool _isLoading = true;
+  bool _isLoggedIn = false;
 
   @override
   void initState() {
@@ -30,27 +33,34 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
   }
 
   Future<void> _loadProfile() async {
+    final isAuth = await AuthStorageService.isLoggedIn();
     final user = await AuthStorageService.getUser();
-    if (user != null && mounted) {
+
+    if (mounted) {
       setState(() {
-        _userName = user['full_name'] ?? '';
-        _userEmail = user['email'] ?? '';
-        _userRole = user['role'] == 'engineer' ? 'مهندس' : (user['role'] == 'installer' ? 'فني' : 'زبون معتمد');
+        _isLoggedIn = isAuth;
+        if (user != null) {
+          _userName = user['full_name'] ?? '';
+          _userPhone = user['phone'] ?? '';
+          _userRole = user['role'] == 'engineer' ? 'مهندس' : (user['role'] == 'installer' ? 'فني' : 'زبون معتمد');
+        } else {
+          _userName = 'زائر المنظومة الشمسية';
+          _userPhone = '';
+        }
         _isLoading = false;
       });
     }
 
-    final res = await ApiClient.getUserProfile();
-    if (res['success'] == true && res['data'] != null && mounted) {
-      final data = res['data'];
-      setState(() {
-        _userName = data['full_name'] ?? _userName;
-        _userEmail = data['email'] ?? _userEmail;
-        _userRole = data['role'] == 'engineer' ? 'مهندس' : (data['role'] == 'installer' ? 'فني' : 'زبون معتمد');
-        _isLoading = false;
-      });
-    } else {
-      if (mounted) setState(() => _isLoading = false);
+    if (isAuth) {
+      final res = await ApiClient.getUserProfile();
+      if (res['success'] == true && res['data'] != null && mounted) {
+        final data = res['data'];
+        setState(() {
+          _userName = data['full_name'] ?? _userName;
+          _userPhone = data['phone'] ?? _userPhone;
+          _userRole = data['role'] == 'engineer' ? 'مهندس' : (data['role'] == 'installer' ? 'فني' : 'زبون معتمد');
+        });
+      }
     }
   }
 
@@ -73,7 +83,7 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
                 await AuthStorageService.logout();
                 if (!mounted) return;
                 Navigator.pop(ctx);
-                AppNotification.showInfo(context, 'تم تسجيل الخروج بنجاح 👋');
+                AppNotification.showInfo(context, 'تم تسجيل الخروج بنجاح ');
               },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
               child: const Text('تسجيل الخروج', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -98,7 +108,7 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              // User Card Header
+              // User Card Header / Guest Banner
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
@@ -126,8 +136,10 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(_userName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-                              const SizedBox(height: 4),
-                              Text(_userEmail, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                              if (_userPhone.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(_userPhone, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                              ],
                               const SizedBox(height: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -135,32 +147,56 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
                                   color: AppTheme.primaryGold,
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: Text('نوع الحساب: $_userRole', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                child: Text(_isLoggedIn ? 'نوع الحساب: $_userRole' : 'وضع الزائر (Guest)', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                               ),
                             ],
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.edit_note_rounded, color: Colors.white, size: 28),
-                          onPressed: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen()));
-                          },
+                        if (_isLoggedIn)
+                          IconButton(
+                            icon: const Icon(Icons.edit_note_rounded, color: Colors.white, size: 28),
+                            onPressed: () {
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen()));
+                            },
+                          ),
+                      ],
+                    ),
+                    if (!_isLoggedIn) ...[
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final loginSuccess = await Navigator.push<bool>(
+                            context,
+                            MaterialPageRoute(builder: (_) => const SolarLoginScreen()),
+                          );
+                          if (loginSuccess == true) {
+                            _loadProfile();
+                          }
+                        },
+                        icon: const Icon(Icons.login_rounded, color: Colors.white),
+                        label: const Text('تسجيل الدخول / إنشاء حساب جديد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryGold,
+                          minimumSize: const Size(double.infinity, 44),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const Divider(color: Colors.white24, height: 1),
-                    const SizedBox(height: 14),
+                      ),
+                    ],
+                    if (_isLoggedIn) ...[
+                      const SizedBox(height: 16),
+                      const Divider(color: Colors.white24, height: 1),
+                      const SizedBox(height: 14),
 
-                    // Quick Stats Bar
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildStatItem('-', 'التصاميم المحفوظة'),
-                        _buildStatItem('-', 'سجل الطلبات'),
-                        _buildStatItem('-', 'المتاجر المفضلة'),
-                      ],
-                    ),
+                      // Quick Stats Bar
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildStatItem('-', 'التصاميم المحفوظة'),
+                          _buildStatItem('-', 'سجل الطلبات'),
+                          _buildStatItem('-', 'المتاجر المفضلة'),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -172,31 +208,56 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
                 Icons.person_outline_rounded,
                 'تعديل البيانات الشخصية والعنوان',
                 'اسم المستخدم، الهواتف والمحافظة',
-                () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen())),
+                () async {
+                  final isAuth = await AuthGuard.requireAuth(context, reasonMessage: 'يرجى تسجيل الدخول لتعديل وحفظ بياناتك الشخصية وعنوان التوصيل.');
+                  if (isAuth && mounted) {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen()));
+                  }
+                },
               ),
               _buildMenuItem(
                 Icons.calculate_outlined,
                 'الحسابات والتصاميم المحفوظة',
                 'سجل حجم المنظومات والتوفير ROI',
-                () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SavedCalculationsScreen())),
+                () async {
+                  final isAuth = await AuthGuard.requireAuth(context, reasonMessage: 'يرجى تسجيل الدخول لاستعراض تصاميم المنظومات الشمسية المحفوظة في حسابك.');
+                  if (isAuth && mounted) {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SavedCalculationsScreen()));
+                  }
+                },
               ),
               _buildMenuItem(
                 Icons.shopping_bag_outlined,
                 'سجل الطلبات والمنظومات',
                 'متابعة حالة التوصيل والتشغيل الميداني',
-                () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MyOrdersHistoryScreen())),
+                () async {
+                  final isAuth = await AuthGuard.requireAuth(context, reasonMessage: 'يرجى تسجيل الدخول لمتابعة سجل الطلبات وحالة التوصيل والمنظومات.');
+                  if (isAuth && mounted) {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const MyOrdersHistoryScreen()));
+                  }
+                },
               ),
               _buildMenuItem(
                 Icons.storefront_outlined,
                 'المتاجر المعتمدة المفضلة',
                 'متابعة تجار الطاقة والمجهزين',
-                () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoriteStoresScreen())),
+                () async {
+                  final isAuth = await AuthGuard.requireAuth(context, reasonMessage: 'يرجى تسجيل الدخول لمتابعة المتاجر المفضلة لديك وتلقي العروض.');
+                  if (isAuth && mounted) {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoriteStoresScreen()));
+                  }
+                },
               ),
               _buildMenuItem(
                 Icons.security_outlined,
                 'الأمان وكلمة المرور والحماية',
                 'بصمة الإصبع 2FA وتشفير الجلسة',
-                () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SecuritySettingsScreen())),
+                () async {
+                  final isAuth = await AuthGuard.requireAuth(context, reasonMessage: 'يرجى تسجيل الدخول للوصول لإعدادات الأمان وحماية الحساب.');
+                  if (isAuth && mounted) {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SecuritySettingsScreen()));
+                  }
+                },
               ),
               _buildMenuItem(
                 Icons.headset_mic_outlined,
@@ -204,14 +265,16 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
                 'المحادثة المباشرة والأسئلة الشائعة',
                 () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SupportHelpScreen())),
               ),
-              const SizedBox(height: 10),
-              _buildMenuItem(
-                Icons.logout_rounded,
-                'تسجيل الخروج من الحساب',
-                'إغلاق الجلسة بشكل آمن',
-                _confirmLogout,
-                isDestructive: true,
-              ),
+              if (_isLoggedIn) ...[
+                const SizedBox(height: 10),
+                _buildMenuItem(
+                  Icons.logout_rounded,
+                  'تسجيل الخروج من الحساب',
+                  'إغلاق الجلسة بشكل آمن',
+                  _confirmLogout,
+                  isDestructive: true,
+                ),
+              ],
             ],
           ),
         ),

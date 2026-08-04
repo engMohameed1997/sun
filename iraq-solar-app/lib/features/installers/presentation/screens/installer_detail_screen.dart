@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
+import '../../../../core/services/auth_guard.dart';
 import '../widgets/installer_chat_dialog.dart';
 
 class InstallerDetailScreen extends StatefulWidget {
@@ -297,7 +298,13 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: () {
+                        onPressed: () async {
+                          final isAuth = await AuthGuard.requireAuth(
+                            context,
+                            reasonMessage: 'يرجى تسجيل الدخول أو إنشاء حساب جديد للتواصل المباشر مع المهندسين والفنيين المعتمدين وطلب الفحص الميداني.',
+                          );
+                          if (!isAuth) return;
+
                           InstallerChatDialog.show(
                             context,
                             name: name,
@@ -316,7 +323,13 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
                     ),
                     const SizedBox(width: 10),
                     OutlinedButton.icon(
-                      onPressed: () {
+                      onPressed: () async {
+                        final isAuth = await AuthGuard.requireAuth(
+                          context,
+                          reasonMessage: 'يرجى تسجيل الدخول أو إنشاء حساب جديد',
+                        );
+                        if (!isAuth) return;
+
                         AppNotification.showInfo(
                           context,
                           'الاتصال بالمهندس $name: $phone 📞',

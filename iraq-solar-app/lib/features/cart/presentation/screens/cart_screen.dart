@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/cart_service.dart';
+import '../../../../core/services/auth_guard.dart';
 import 'checkout_screen.dart';
 
 class SolarCartScreen extends StatefulWidget {
@@ -53,7 +54,7 @@ class _SolarCartScreenState extends State<SolarCartScreen> {
       child: Scaffold(
         backgroundColor: AppTheme.backgroundLight,
         appBar: AppBar(
-          title: const Text('سلة الشراء (محتويات الطلب)'),
+          title: const Text('سلة الشراء'),
           backgroundColor: AppTheme.darkNavy,
         ),
         body: cartItems.isEmpty
@@ -65,7 +66,7 @@ class _SolarCartScreenState extends State<SolarCartScreen> {
                     const SizedBox(height: 14),
                     const Text('سلة الشراء فارغة حالياً', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.darkNavy)),
                     const SizedBox(height: 6),
-                    Text('تصفح المتاجر والقطع الشمسية لإضافة المشتريات', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                    Text('تصفح المتاجر لإضافة المشتريات', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                   ],
                 ),
               )
@@ -151,11 +152,17 @@ class _SolarCartScreenState extends State<SolarCartScreen> {
                             width: double.infinity,
                             height: 52,
                             child: ElevatedButton(
-                              onPressed: () {
-                                Navigator.push(
+                              onPressed: () async {
+                                final isAuth = await AuthGuard.requireAuth(
                                   context,
-                                  MaterialPageRoute(builder: (context) => const CheckoutScreen()),
+                                  reasonMessage: 'يرجى تسجيل الدخول برقم الهاتف والرمز لإكمال الشراء وتحديد موقع التوصيل.',
                                 );
+                                if (isAuth && mounted) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => const CheckoutScreen()),
+                                  );
+                                }
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.darkNavy,
@@ -165,7 +172,7 @@ class _SolarCartScreenState extends State<SolarCartScreen> {
                               child: const Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Text('المتابعة لإكمال الشراء والتوصيل', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                  Text(' اكمال  الشراء ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                                   SizedBox(width: 8),
                                   Icon(Icons.arrow_back_rounded, color: AppTheme.primaryGold, size: 18),
                                 ],

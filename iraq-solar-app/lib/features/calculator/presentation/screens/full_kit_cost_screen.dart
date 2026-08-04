@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../core/services/auth_guard.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../products/presentation/screens/catalog_screen.dart';
 
@@ -27,6 +28,12 @@ class _FullKitCostScreenState extends State<FullKitCostScreen> {
     final kw = double.tryParse(_kwController.text) ?? 0;
     final kwh = double.tryParse(_kwhController.text) ?? 0;
     if (kw <= 0) return;
+
+    final isAuth = await AuthGuard.requireAuth(
+      context,
+      reasonMessage: 'يرجى تسجيل الدخول أو إنشاء حساب مجاني لحساب تفاصيل تكلفة البكج والتجميعة وتأكيد السعر النهائي.',
+    );
+    if (!isAuth) return;
     setState(() => _isLoading = true);
 
     final res = await ApiClient.calculateFullKitCost(systemSizekW: kw, batterykWh: kwh, includeInstallation: _includeInstallation);

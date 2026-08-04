@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 	"github.com/iraq-solar/api/internal/domain"
+	"github.com/jmoiron/sqlx"
 )
 
 type StoreRepository struct {
@@ -23,18 +23,18 @@ func NewStoreRepository(db *sqlx.DB) *StoreRepository {
 
 func (r *StoreRepository) CreateStore(ctx context.Context, store *domain.Store) error {
 	query := `
-		INSERT INTO stores (id, merchant_id, name, slug, description, logo_url, cover_url, phone, email, is_verified, is_active, created_at, updated_at)
+		INSERT INTO stores (id, merchant_id, name, slug, description, logo_url, cover_url, phone, is_verified, is_active, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
 		RETURNING created_at, updated_at
 	`
 	return r.db.QueryRowContext(ctx, query,
-		store.ID, store.MerchantID, store.Name, store.Slug, store.Description, store.LogoURL, store.CoverURL, store.Phone, store.Email, store.IsVerified, store.IsActive,
+		store.ID, store.MerchantID, store.Name, store.Slug, store.Description, store.LogoURL, store.CoverURL, store.Phone, store.IsVerified, store.IsActive,
 	).Scan(&store.CreatedAt, &store.UpdatedAt)
 }
 
 func (r *StoreRepository) GetStoreByID(ctx context.Context, id uuid.UUID) (*domain.Store, error) {
 	var store domain.Store
-	query := `SELECT * FROM stores WHERE id = $1`
+	query := `SELECT id, merchant_id, name, slug, description, logo_url, cover_url, phone, is_verified, is_active, rating, total_ratings, created_at, updated_at FROM stores WHERE id = $1`
 	err := r.db.GetContext(ctx, &store, query, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -47,7 +47,7 @@ func (r *StoreRepository) GetStoreByID(ctx context.Context, id uuid.UUID) (*doma
 
 func (r *StoreRepository) GetStoreByMerchantID(ctx context.Context, merchantID uuid.UUID) (*domain.Store, error) {
 	var store domain.Store
-	query := `SELECT * FROM stores WHERE merchant_id = $1 LIMIT 1`
+	query := `SELECT id, merchant_id, name, slug, description, logo_url, cover_url, phone, is_verified, is_active, rating, total_ratings, created_at, updated_at FROM stores WHERE merchant_id = $1 LIMIT 1`
 	err := r.db.GetContext(ctx, &store, query, merchantID)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -59,7 +59,7 @@ func (r *StoreRepository) GetStoreByMerchantID(ctx context.Context, merchantID u
 }
 
 func (r *StoreRepository) ListStores(ctx context.Context, search string, isVerified *bool, limit, offset int) ([]domain.Store, int, error) {
-	query := `SELECT * FROM stores WHERE 1=1`
+	query := `SELECT id, merchant_id, name, slug, description, logo_url, cover_url, phone, is_verified, is_active, rating, total_ratings, created_at, updated_at FROM stores WHERE 1=1`
 	countQuery := `SELECT COUNT(*) FROM stores WHERE 1=1`
 	var args []interface{}
 	argID := 1
@@ -127,11 +127,6 @@ func (r *StoreRepository) UpdateStore(ctx context.Context, id uuid.UUID, req dom
 	if req.Phone != nil {
 		setParts = append(setParts, fmt.Sprintf("phone = $%d", argID))
 		args = append(args, *req.Phone)
-		argID++
-	}
-	if req.Email != nil {
-		setParts = append(setParts, fmt.Sprintf("email = $%d", argID))
-		args = append(args, *req.Email)
 		argID++
 	}
 	if req.IsActive != nil {

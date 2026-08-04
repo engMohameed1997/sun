@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/services/auth_guard.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/services/auth_storage.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -132,7 +133,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       child: Scaffold(
         backgroundColor: AppTheme.backgroundLight,
         appBar: AppBar(
-          title: const Text('إكمال الشراء والتوصيل'),
+          title: const Text('إكمال الشراء'),
           backgroundColor: AppTheme.darkNavy,
         ),
         body: SingleChildScrollView(
@@ -403,16 +404,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     ),
                     const SizedBox(height: 18),
 
-                    // Final Order Confirmation Button
                     SizedBox(
                       width: double.infinity,
                       height: 52,
                       child: ElevatedButton(
                         onPressed: () async {
-                          if (_fullNameController.text.trim().isEmpty || _phoneController.text.trim().isEmpty) {
+                          final isAuth = await AuthGuard.requireAuth(
+                            context,
+                            reasonMessage: 'يرجى تسجيل الدخول أو إنشاء حساب جديد لإكـمال الشراء، وادخال موقع وتفاصيل الموقع وتأكيد طلبك.',
+                          );
+                          if (!isAuth) return;
+
+                          if (_fullNameController.text.trim().isEmpty || _phoneController.text.trim().isEmpty || _districtController.text.trim().isEmpty) {
                             AppNotification.showError(
                               context,
-                              'يرجى كتابة الاسم الثلاثي ورقم الهاتف لتأكيد الطلب',
+                              'يرجى كتابة الاسم الثلاثي، رقم الهاتف، وتفاصيل الموقع (المنطقة / أقرب نقطة دالة)',
                             );
                             return;
                           }
@@ -424,26 +430,40 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                   : 'بطاقة كي كارد / سوبر كي';
 
                           final token = await AuthStorageService.getToken();
+                          String createdOrderId = '';
+
+                          // Build the correct payload for the Go backend
                           final orderData = {
-                            'total_amount_usd': (_totalIQD / 1500.0),
-                            'shipping_address': 'محافظة $_selectedGovernorate - ${_districtController.text}',
+                            'total_amount_iqd': _totalIQD,
+                            'shipping_address':
+                                'محافظة $_selectedGovernorate - ${_districtController.text.trim()}',
                             'payment_method': _selectedPaymentMethod,
-                            'items': CartService.instance.items.map((i) => {
-                              'title': i.title,
-                              'quantity': i.qty,
-                              'price_iqd': i.priceIQD,
-                            }).toList(),
+                            'items': CartService.instance.items
+                                .map((i) => {
+                                      'product_id': i.id,
+                                      'quantity': i.qty,
+                                      'unit_price_iqd': i.priceIQD,
+                                    })
+                                .toList(),
                           };
 
                           if (token != null && token.isNotEmpty) {
-                            await ApiClient.createOrder(token, orderData);
+                            final res = await ApiClient.createOrder(token, orderData);
+                            if (res['success'] == true && res['data'] != null) {
+                              createdOrderId = res['data']['id']?.toString() ?? '';
+                            }
                           }
 
-                          final createdOrderId = '#IQ-${DateTime.now().year}-${(1000 + (DateTime.now().millisecondsSinceEpoch % 8999))}';
+                          // Fallback ID if API didn't return one
+                          if (createdOrderId.isEmpty) {
+                            createdOrderId =
+                                'local-${DateTime.now().millisecondsSinceEpoch}';
+                          }
+
                           CartService.instance.clearCart();
 
                           if (!mounted) return;
-                          Navigator.push(
+                          Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(
                               builder: (context) => OrderDetailsScreen(

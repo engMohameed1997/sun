@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../core/services/auth_guard.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../products/presentation/screens/catalog_screen.dart';
@@ -31,6 +32,12 @@ class _SizingCalculatorScreenState extends State<SizingCalculatorScreen> {
       AppNotification.showError(context, 'يرجى إدخال قيمة استهلاك يومية صالحة');
       return;
     }
+
+    final isAuth = await AuthGuard.requireAuth(
+      context,
+      reasonMessage: 'يرجى تسجيل الدخول أو إنشاء حساب مجاني لعرض تقرير النتيجة وحساب تكلفة المنظومة بالكامل.',
+    );
+    if (!isAuth) return;
 
     setState(() => _isLoading = true);
 

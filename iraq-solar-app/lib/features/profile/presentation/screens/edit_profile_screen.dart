@@ -13,7 +13,6 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _nameController = TextEditingController();
-  final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
   String _selectedCity = 'بغداد';
@@ -33,7 +32,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (user != null && mounted) {
       setState(() {
         _nameController.text = user['full_name'] ?? '';
-        _emailController.text = user['email'] ?? '';
         _phoneController.text = user['phone'] ?? '';
         _addressController.text = user['city'] ?? '';
         final gov = user['governorate'] ?? '';
@@ -46,7 +44,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final data = res['data'];
       setState(() {
         _nameController.text = data['full_name'] ?? _nameController.text;
-        _emailController.text = data['email'] ?? _emailController.text;
         _phoneController.text = data['phone'] ?? _phoneController.text;
         _addressController.text = data['city'] ?? _addressController.text;
         final gov = data['governorate'] ?? '';
@@ -137,11 +134,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     TextField(
                       controller: _nameController,
                       decoration: const InputDecoration(labelText: 'الاسم الثلاثي الكامل', prefixIcon: Icon(Icons.person_outline, color: AppTheme.darkNavy)),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: _emailController,
-                      decoration: const InputDecoration(labelText: 'البريد الإلكتروني', prefixIcon: Icon(Icons.email_outlined, color: AppTheme.darkNavy)),
                     ),
                     const SizedBox(height: 14),
                     TextField(

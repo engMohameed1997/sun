@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS stores (
     logo_url TEXT,
     cover_url TEXT,
     phone VARCHAR(20),
-    email VARCHAR(150),
     is_verified BOOLEAN DEFAULT false,
     is_active BOOLEAN DEFAULT true,
     rating NUMERIC(2,1) DEFAULT 0,

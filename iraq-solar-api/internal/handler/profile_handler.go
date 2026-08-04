@@ -42,7 +42,6 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 	utils.SuccessResponse(c, http.StatusOK, "تم جلب الملف الشخصي بنجاح", gin.H{
 		"id":          user.ID,
 		"full_name":   user.FullName,
-		"email":       user.Email,
 		"phone":       user.Phone,
 		"role":        user.Role,
 		"governorate": user.Governorate,
@@ -106,7 +105,6 @@ func (h *ProfileHandler) UpdateProfile(c *gin.Context) {
 	utils.SuccessResponse(c, http.StatusOK, "تم تحديث الملف الشخصي بنجاح", gin.H{
 		"id":          user.ID,
 		"full_name":   user.FullName,
-		"email":       user.Email,
 		"phone":       user.Phone,
 		"role":        user.Role,
 		"governorate": user.Governorate,

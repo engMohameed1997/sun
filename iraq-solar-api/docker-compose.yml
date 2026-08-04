@@ -32,6 +32,17 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql
       - ./migrations/002_admin_extensions.sql:/docker-entrypoint-initdb.d/002_admin_extensions.sql
+      - ./migrations/003_add_store_verification.sql:/docker-entrypoint-initdb.d/003_add_store_verification.sql
+      - ./migrations/004_add_product_ownership_stock.sql:/docker-entrypoint-initdb.d/004_add_product_ownership_stock.sql
+      - ./migrations/005_add_order_status_history.sql:/docker-entrypoint-initdb.d/005_add_order_status_history.sql
+      - ./migrations/006_delivery_fee_flags.sql:/docker-entrypoint-initdb.d/006_delivery_fee_flags.sql
+      - ./migrations/007_search_indexes.sql:/docker-entrypoint-initdb.d/007_search_indexes.sql
+      - ./migrations/008_add_stores_and_branches.sql:/docker-entrypoint-initdb.d/008_add_stores_and_branches.sql
+      - ./migrations/009_add_brands.sql:/docker-entrypoint-initdb.d/009_add_brands.sql
+      - ./migrations/010_usd_to_iqd_and_product_brand.sql:/docker-entrypoint-initdb.d/010_usd_to_iqd_and_product_brand.sql
+      - ./migrations/011_orders_branch_relation.sql:/docker-entrypoint-initdb.d/011_orders_branch_relation.sql
+      - ./migrations/012_add_location_hierarchy.sql:/docker-entrypoint-initdb.d/012_add_location_hierarchy.sql
+      - ./migrations/013_add_auth_security_tables.sql:/docker-entrypoint-initdb.d/013_add_auth_security_tables.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s

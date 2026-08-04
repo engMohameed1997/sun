@@ -45,12 +45,11 @@ func (rl *RateLimiter) allow(ip string) bool {
 	if !exists {
 		rl.visitors[ip] = &ipVisitor{
 			lastSeen: now,
-			tokens:   rl.capacity - 1, // Consume 1 token
+			tokens:   rl.capacity - 1,
 		}
 		return true
 	}
 
-	// Calculate refilled tokens since last visit
 	elapsed := now.Sub(v.lastSeen).Seconds()
 	v.lastSeen = now
 	v.tokens += elapsed * rl.rate
@@ -88,6 +87,21 @@ func RateLimiterMiddleware(reqPerMin int) gin.HandlerFunc {
 		ip := c.ClientIP()
 		if !limiter.allow(ip) {
 			utils.ErrorResponse(c, http.StatusTooManyRequests, "تجاوزت الحد المسموح به من الطلبات، يرجى الانتظار قليلاً والتحقق مجدداً", "RATE_LIMIT_EXCEEDED", errors.New("rate limit reached"))
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// StrictRateLimiterMiddleware provides tighter rate limits for sensitive routes (Login / Register / Refresh)
+func StrictRateLimiterMiddleware(reqPerMin int) gin.HandlerFunc {
+	limiter := NewRateLimiter(reqPerMin)
+
+	return func(c *gin.Context) {
+		ip := c.ClientIP()
+		if !limiter.allow(ip) {
+			utils.ErrorResponse(c, http.StatusTooManyRequests, "تم تجاوز الحد الأقصى لمحاولات الدخول/التسجيل. يرجى الانتظار دقيقة والتحقق مجدداً", "AUTH_RATE_LIMIT_EXCEEDED", errors.New("auth rate limit exceeded"))
 			c.Abort()
 			return
 		}

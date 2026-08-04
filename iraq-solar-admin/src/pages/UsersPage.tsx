@@ -11,7 +11,6 @@ export const UsersPage: React.FC = () => {
 
   // Form State
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('engineer');
@@ -23,33 +22,6 @@ export const UsersPage: React.FC = () => {
       const res = await api.get(`/admin/users?role=${roleFilter}&search=${search}`);
       if (res.data?.data?.users) {
         setUsers(res.data.data.users);
-      } else {
-        setUsers([
-          {
-            id: 'u-1',
-            full_name: 'أحمد محمود العبيدي',
-            email: 'engineer1@iraqsolar.iq',
-            phone: '07700001111',
-            role: 'engineer',
-            governorate: 'بغداد',
-            city: 'المنصور',
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          {
-            id: 'u-2',
-            full_name: 'شركة دجلة للتنفيذ والشمس',
-            email: 'merchant@dijla.iq',
-            phone: '07800002222',
-            role: 'merchant',
-            governorate: 'البصرة',
-            city: 'الجزائر',
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-        ]);
       }
     } catch (err) {
       console.error('Failed to fetch users', err);
@@ -74,7 +46,6 @@ export const UsersPage: React.FC = () => {
     try {
       await api.post('/admin/users', {
         full_name: fullName,
-        email,
         phone,
         password,
         role,
@@ -104,7 +75,7 @@ export const UsersPage: React.FC = () => {
           <div className="relative">
             <input
               type="text"
-              placeholder="بحث بالاسم أو البريد..."
+              placeholder="بحث بالاسم أو رقم الهاتف..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && fetchUsers()}
@@ -168,9 +139,8 @@ export const UsersPage: React.FC = () => {
                 <td className="p-4 text-center">
                   <button
                     onClick={() => handleToggleActive(u.id, u.is_active)}
-                    className={`px-3 py-1 rounded-lg font-bold transition ${
-                      u.is_active ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                    }`}
+                    className={`px-3 py-1 rounded-lg font-bold transition ${u.is_active ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                      }`}
                   >
                     {u.is_active ? 'تعطيل الحساب' : 'تفعيل'}
                   </button>
@@ -196,19 +166,6 @@ export const UsersPage: React.FC = () => {
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100"
                 />
               </div>
-
-              <div dir="ltr">
-                <label className="block text-slate-400 mb-1">البريد الإلكتروني</label>
-                <input
-                  type="email"
-                  required
-                  dir="ltr"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value.replace(/\u200F/g, ''))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 text-left"
-                />
-              </div>
-
               <div>
                 <label className="block text-slate-400 mb-1">رقم الهاتف</label>
                 <input

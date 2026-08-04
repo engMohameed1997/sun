@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../core/services/auth_storage.dart';
 import 'notifications_screen.dart';
 import '../widgets/search_filter_sheet.dart';
 import '../widgets/banner_carousel.dart';
@@ -26,11 +27,42 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
   List<Map<String, dynamic>> _productsList = [];
   List<Map<String, dynamic>> _installersList = [];
   bool _isLoadingData = true;
+  String _userName = '';
+  bool _isLoggedIn = false;
 
   @override
   void initState() {
     super.initState();
+    _loadUserData();
     _fetchLiveData();
+  }
+
+  Future<void> _loadUserData() async {
+    final isAuth = await AuthStorageService.isLoggedIn();
+    final user = await AuthStorageService.getUser();
+    if (mounted) {
+      setState(() {
+        _isLoggedIn = isAuth;
+        if (isAuth && user != null && user['full_name'] != null && user['full_name'].toString().isNotEmpty) {
+          _userName = user['full_name'].toString();
+        } else {
+          _userName = '';
+        }
+      });
+    }
+
+    if (isAuth) {
+      final profileRes = await ApiClient.getUserProfile();
+      if (profileRes['success'] == true && profileRes['data'] != null && profileRes['data'] is Map) {
+        final data = profileRes['data'] as Map<String, dynamic>;
+        final name = data['full_name']?.toString() ?? '';
+        if (name.isNotEmpty && mounted) {
+          setState(() {
+            _userName = name;
+          });
+        }
+      }
+    }
   }
 
   Future<void> _fetchLiveData() async {
@@ -247,10 +279,17 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
                   const SizedBox(width: 12),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
+                    children: [
                       Text(
-                        'أهلاً بك 👋',
-                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                        _isLoggedIn && _userName.isNotEmpty
+                            ? 'مرحباً، $_userName '
+                            : '',
+                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _isLoggedIn ? 'مرحباً بك ' : '',
+                        style: const TextStyle(color: Colors.white70, fontSize: 11),
                       ),
                     ],
                   ),

@@ -10,7 +10,6 @@ import (
 
 var (
 	iraqPhoneRegex = regexp.MustCompile(`^07[3-9]\d{8}$`)
-	emailRegex     = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 )
 
 // SanitizeString — تنظيف النصوص من أي رموز HTML أو سكريبتات خبيثة (Requirement 2)
@@ -25,12 +24,6 @@ func SanitizeString(input string) string {
 func IsValidIraqiPhone(phone string) bool {
 	clean := strings.TrimSpace(phone)
 	return iraqPhoneRegex.MatchString(clean)
-}
-
-// IsValidEmail — التحقق الحارم من صيغة البريد الإلكتروني
-func IsValidEmail(email string) bool {
-	clean := strings.TrimSpace(email)
-	return emailRegex.MatchString(clean)
 }
 
 // IsValidUUID — التحقق من صحة المعرف UUID

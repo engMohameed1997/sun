@@ -3,9 +3,8 @@ package domain
 import "time"
 
 const (
-	SettingKeyPlatformFee = "platform_fee_percentage"
-	SettingKeyContactEmail = "contact_email"
-	SettingKeyContactPhone = "contact_phone"
+	SettingKeyPlatformFee   = "platform_fee_percentage"
+	SettingKeyContactPhone  = "contact_phone"
 	SettingKeyMinOrderValue = "min_order_value"
 )
 

@@ -15,7 +15,6 @@ export type Permission =
 export interface User {
   id: string;
   full_name: string;
-  email: string;
   phone: string;
   role: Role;
   governorate?: string;
@@ -52,7 +51,6 @@ export interface Store {
   logo_url?: string;
   cover_url?: string;
   phone?: string;
-  email?: string;
   is_verified: boolean;
   is_active: boolean;
   rating: number;
@@ -121,6 +119,7 @@ export interface OrderStatusHistory {
   from_status?: string;
   to_status: string;
   changed_by?: string;
+  changed_by_name?: string;
   notes?: string;
   created_at: string;
 }
@@ -128,17 +127,99 @@ export interface OrderStatusHistory {
 export interface Order {
   id: string;
   user_id: string;
+  store_id?: string;
+  branch_id?: string;
   status: OrderStatus;
   total_amount_iqd: number;
   shipping_address: string;
   payment_method: string;
   payment_status: string;
   customer_name?: string;
-  customer_email?: string;
   customer_phone?: string;
   created_at: string;
   updated_at: string;
   items?: OrderItem[];
+}
+
+export interface OrderItemFull extends OrderItem {
+  product_name?: string;
+  product_sku?: string;
+  product_image?: string;
+}
+
+export interface OrderFull {
+  id: string;
+  user_id: string;
+  store_id?: string;
+  branch_id?: string;
+  status: OrderStatus;
+  total_amount_iqd: number;
+  shipping_address: string;
+  payment_method: string;
+  payment_status: string;
+  created_at: string;
+  updated_at: string;
+  // Customer
+  customer_name: string;
+  customer_phone: string;
+  customer_governorate?: string;
+  customer_city?: string;
+  // Store
+  store_name?: string;
+  store_slug?: string;
+  store_logo_url?: string;
+  store_phone?: string;
+  // Branch
+  branch_name?: string;
+  branch_address?: string;
+  branch_city?: string;
+  branch_phone?: string;
+  branch_governorate_ar?: string;
+  branch_governorate_en?: string;
+  // Collections
+  items?: OrderItemFull[];
+  status_history?: OrderStatusHistory[];
+}
+
+export type WSMessageType =
+  | 'order.new'
+  | 'order.status_changed'
+  | 'order.cancelled'
+  | 'ping'
+  | 'pong';
+
+export interface WSMessage {
+  type: WSMessageType;
+  payload: any;
+  timestamp: string;
+}
+
+export interface OrderStatusChangedPayload {
+  order_id: string;
+  from_status: OrderStatus;
+  to_status: OrderStatus;
+  changed_by: string;
+  notes?: string;
+  updated_at: string;
+}
+
+export interface AdminOrdersResponse {
+  orders: OrderFull[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+}
+
+export interface OrderFilters {
+  status?: OrderStatus | '';
+  search?: string;
+  store_id?: string;
+  branch_id?: string;
+  from_date?: string;
+  to_date?: string;
+  page?: number;
+  limit?: number;
 }
 
 export interface DeliveryFee {

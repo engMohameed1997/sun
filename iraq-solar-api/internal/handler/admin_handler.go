@@ -120,7 +120,6 @@ func (h *AdminHandler) GetUser(c *gin.Context) {
 
 type CreateUserByAdminReq struct {
 	FullName    string      `json:"full_name" binding:"required,min=3"`
-	Email       string      `json:"email" binding:"omitempty,email"`
 	Phone       string      `json:"phone" binding:"required"`
 	Password    string      `json:"password" binding:"required,min=6"`
 	Role        domain.Role `json:"role" binding:"required"`
@@ -135,16 +134,16 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	if req.Role == domain.RoleAdmin && strings.TrimSpace(req.Email) == "" {
-		utils.ErrorResponse(c, http.StatusBadRequest, "لا يمكن إضافة مدير نظام (Admin) بدون بريد إلكتروني، يُرجى إدخال البريد الإلكتروني", "EMAIL_REQUIRED_FOR_ADMIN", nil)
+	if req.Role == domain.RoleAdmin && strings.TrimSpace(req.Phone) == "" {
+		utils.ErrorResponse(c, http.StatusBadRequest, "لا يمكن إضافة مدير نظام (Admin) بدون رقم هاتف، يُرجى إدخال رقم الهاتف", "PHONE_REQUIRED_FOR_ADMIN", nil)
 		return
 	}
 
 	adminID := h.getAdminID(c)
-	user, err := h.adminService.CreateUserByAdmin(c.Request.Context(), adminID, req.FullName, req.Email, req.Phone, req.Password, req.Role, req.Governorate, req.City)
+	user, err := h.adminService.CreateUserByAdmin(c.Request.Context(), adminID, req.FullName, req.Phone, req.Password, req.Role, req.Governorate, req.City)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
-			utils.BadRequestError(c, "رقم الهاتف أو البريد الإلكتروني مستخدم بالفعل", err)
+			utils.BadRequestError(c, "رقم الهاتف مستخدم بالفعل", err)
 		} else {
 			utils.BadRequestError(c, "فشل إنشاء حساب المستخدم: "+err.Error(), err)
 		}
@@ -255,7 +254,6 @@ func (h *AdminHandler) ListStores(c *gin.Context) {
 type CreateStoreReq struct {
 	Name        string `json:"name" binding:"required,min=3"`
 	OwnerName   string `json:"owner_name"`
-	Email       string `json:"email" binding:"omitempty,email"`
 	Phone       string `json:"phone" binding:"required"`
 	Password    string `json:"password" binding:"required,min=6"`
 	Governorate string `json:"governorate"`
@@ -279,7 +277,6 @@ func (h *AdminHandler) CreateStore(c *gin.Context) {
 		c.Request.Context(),
 		adminID,
 		fullName,
-		req.Email,
 		req.Phone,
 		req.Password,
 		domain.RoleMerchant,
@@ -448,6 +445,18 @@ func (h *AdminHandler) ListGovernorates(c *gin.Context) {
 	utils.SuccessResponse(c, http.StatusOK, "تم جلب قائمة المحافظات بنجاح", governorates)
 }
 
+func (h *AdminHandler) ListDistricts(c *gin.Context) {
+	idStr := c.Param("id")
+	govID, _ := strconv.Atoi(idStr)
+
+	districts, err := h.adminService.ListDistrictsByGovernorate(c.Request.Context(), govID)
+	if err != nil {
+		utils.InternalServerError(c, err)
+		return
+	}
+	utils.SuccessResponse(c, http.StatusOK, "تم جلب قائمة الأقضية والنواحي بنجاح", districts)
+}
+
 type CreateGovernorateReq struct {
 	NameAr string `json:"name_ar" binding:"required"`
 	NameEn string `json:"name_en"`
@@ -542,12 +551,12 @@ func (h *AdminHandler) ListHomeBanners(c *gin.Context) {
 }
 
 type CreateHomeBannerReq struct {
-	Title        string    `json:"title" binding:"required"`
-	Subtitle     string    `json:"subtitle"`
-	ImageURL     string    `json:"image_url" binding:"required"`
-	LinkURL      string    `json:"link_url"`
-	DisplayOrder int       `json:"display_order"`
-	IsActive     bool      `json:"is_active"`
+	Title        string     `json:"title" binding:"required"`
+	Subtitle     string     `json:"subtitle"`
+	ImageURL     string     `json:"image_url" binding:"required"`
+	LinkURL      string     `json:"link_url"`
+	DisplayOrder int        `json:"display_order"`
+	IsActive     bool       `json:"is_active"`
 	StartsAt     *time.Time `json:"starts_at"`
 	EndsAt       *time.Time `json:"ends_at"`
 }
@@ -747,4 +756,3 @@ func (h *AdminHandler) LowStockProducts(c *gin.Context) {
 	}
 	utils.SuccessResponse(c, http.StatusOK, "تم جلب المنتجات القليلة المخزون بنجاح", products)
 }
-

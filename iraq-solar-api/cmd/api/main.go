@@ -17,6 +17,7 @@ import (
 	"github.com/iraq-solar/api/internal/database"
 	"github.com/iraq-solar/api/internal/domain"
 	"github.com/iraq-solar/api/internal/handler"
+	"github.com/iraq-solar/api/internal/hub"
 	"github.com/iraq-solar/api/internal/middleware"
 	"github.com/iraq-solar/api/internal/repository"
 	"github.com/iraq-solar/api/internal/service"
@@ -42,6 +43,7 @@ func main() {
 
 	// 3. Initialize Repositories
 	userRepo := repository.NewUserRepository(dbPool)
+	secRepo := repository.NewAuthSecurityRepository(dbPool)
 	storeRepo := repository.NewStoreRepository(dbPool)
 	productRepo := repository.NewProductRepository(dbPool)
 	categoryRepo := repository.NewCategoryRepository(dbPool)
@@ -53,14 +55,20 @@ func main() {
 	bannerRepo := repository.NewBannerRepository(dbPool)
 	notificationRepo := repository.NewNotificationRepository(dbPool)
 
-	// 4. Initialize Services
+	// 4. Initialize WebSocket Hub
+	orderHub := hub.NewOrderHub()
+	go orderHub.Run()
+	log.Println("OrderHub started")
+
+	// 5. Initialize Services
 	storeService := service.NewStoreService(storeRepo, userRepo)
-	authService := service.NewAuthService(cfg.JWTSecret, userRepo)
+	authService := service.NewAuthService(cfg.JWTSecret, userRepo, secRepo)
 	calcService := service.NewSolarCalculatorService(calcRepo)
-	orderService := service.NewOrderService(orderRepo, productRepo)
+	orderService := service.NewOrderService(orderRepo, productRepo, orderHub)
 	orderService.StartPendingOrdersCleanupCron(context.Background(), 15*time.Minute, 24)
 	adminService := service.NewAdminService(adminRepo, governorateRepo, bannerRepo, notificationRepo)
 	notificationService := service.NewNotificationService(notificationRepo)
+	_ = notificationService // retained for notifications WS endpoint
 
 	minioService, minioErr := service.NewMinIOService(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey, cfg.MinIOBucket, cfg.MinIOUseSSL)
 	if minioErr != nil {
@@ -78,7 +86,7 @@ func main() {
 	orderHandler := handler.NewOrderHandler(orderService)
 	adminHandler := handler.NewAdminHandler(adminService)
 	uploadHandler := handler.NewUploadHandler(minioService)
-	wsHandler := handler.NewWebSocketHandler(notificationService)
+	wsHandler := handler.NewWebSocketHandler(orderHub)
 	notifHandler := handler.NewNotificationHandler(notificationRepo)
 	installerHandler := handler.NewInstallerHandler(userRepo)
 	profileHandler := handler.NewProfileHandler(userRepo)
@@ -114,11 +122,14 @@ func main() {
 	// API Group v1
 	v1 := router.Group("/api/v1")
 	{
-		// Public Auth Routes
+		// Public Auth Routes (With strict rate limiting)
 		authGroup := v1.Group("/auth")
+		authGroup.Use(middleware.StrictRateLimiterMiddleware(15))
 		{
 			authGroup.POST("/register", authHandler.Register)
 			authGroup.POST("/login", authHandler.Login)
+			authGroup.POST("/refresh", authHandler.Refresh)
+			authGroup.POST("/logout", authHandler.Logout)
 		}
 
 		// Solar System Sizing & Specialized Calculators
@@ -146,6 +157,7 @@ func main() {
 		v1.GET("/categories", productHandler.ListCategories)
 		v1.GET("/brands", brandHandler.ListBrands)
 		v1.GET("/governorates", adminHandler.ListGovernorates)
+		v1.GET("/governorates/:id/districts", adminHandler.ListDistricts)
 		v1.GET("/banners", adminHandler.ListHomeBanners)
 		// Stores (Public)
 		v1.GET("/stores", storeHandler.ListStores)
@@ -226,8 +238,11 @@ func main() {
 				notifGroup.DELETE("/:id", notifHandler.DeleteNotification)
 			}
 
-			// Notifications WebSocket
-			protected.GET("/admin/notifications/ws", wsHandler.HandleConnections)
+			// Notifications WebSocket (legacy)
+			protected.GET("/admin/notifications/ws", wsHandler.HandleAdminOrders)
+
+			// Orders WebSocket — real-time order events for admins & merchants
+			protected.GET("/ws/orders", wsHandler.HandleAdminOrders)
 
 			// Admin-only Endpoints (Full control panel API)
 			adminOnly := protected.Group("/admin")
@@ -262,10 +277,10 @@ func main() {
 				adminOnly.GET("/stores/:id/delivery-fees", adminHandler.GetStoreDeliveryFees)
 				adminOnly.PUT("/stores/:id/delivery-fees", adminHandler.UpdateStoreDeliveryFees)
 
-				// Orders
-				adminOnly.GET("/orders", adminHandler.ListOrders)
-				adminOnly.GET("/orders/:id", adminHandler.GetOrderDetail)
-				adminOnly.PUT("/orders/:id/status", adminHandler.UpdateOrderStatus)
+				// Orders — REST (paginated, filtered, with full relations)
+				adminOnly.GET("/orders", orderHandler.AdminListOrders)
+				adminOnly.GET("/orders/:id", orderHandler.AdminGetOrder)
+				adminOnly.PUT("/orders/:id/status", orderHandler.AdminUpdateOrderStatus)
 
 				// Categories
 				adminOnly.POST("/categories", productHandler.CreateCategory)
