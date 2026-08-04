@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   api:
     build:
@@ -15,6 +13,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+        restart: true
       redis:
         condition: service_started
     restart: always
@@ -44,10 +43,11 @@ services:
       - ./migrations/012_add_location_hierarchy.sql:/docker-entrypoint-initdb.d/012_add_location_hierarchy.sql
       - ./migrations/013_add_auth_security_tables.sql:/docker-entrypoint-initdb.d/013_add_auth_security_tables.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d iraq_solar_db"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
     restart: always
 
   redis:

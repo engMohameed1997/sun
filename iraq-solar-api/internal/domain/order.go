@@ -9,11 +9,13 @@ import (
 type OrderStatus string
 
 const (
-	StatusPending    OrderStatus = "pending"
-	StatusConfirmed  OrderStatus = "confirmed"
-	StatusProcessing OrderStatus = "processing"
-	StatusCompleted  OrderStatus = "completed"
-	StatusCancelled  OrderStatus = "cancelled"
+	StatusPending        OrderStatus = "pending"
+	StatusConfirmed      OrderStatus = "confirmed"
+	StatusProcessing     OrderStatus = "processing"
+	StatusReadyForPickup OrderStatus = "ready_for_pickup"
+	StatusDelivered      OrderStatus = "delivered"
+	StatusCompleted      OrderStatus = "completed"
+	StatusCancelled      OrderStatus = "cancelled"
 )
 
 // OrderItem represents a single product line within an order.

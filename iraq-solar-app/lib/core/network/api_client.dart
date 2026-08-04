@@ -1,10 +1,17 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
 import '../services/auth_storage.dart';
 
 class ApiClient {
-  static const String baseUrl = 'http://localhost:8080/api/v1';
+  static String get baseUrl {
+    if (!kIsWeb && Platform.isAndroid) {
+      return 'http://10.0.2.2:8080/api/v1';
+    }
+    return 'http://localhost:8080/api/v1';
+  }
 
   static Future<Map<String, String>> headersAsync([String? token]) async {
     final activeToken = token ?? await AuthStorageService.getToken();
@@ -66,6 +73,25 @@ class ApiClient {
       }
     } catch (_) {}
     return false;
+  }
+
+  static Future<http.Response> sendAuthenticatedRequest(
+    Future<http.Response> Function(Map<String, String> headers) requestFn, {
+    String? explicitToken,
+  }) async {
+    var token = explicitToken ?? await AuthStorageService.getToken();
+    var h = await headersAsync(token);
+    var response = await requestFn(h);
+
+    if (response.statusCode == 401) {
+      final refreshed = await refreshTokenApi();
+      if (refreshed) {
+        final newToken = await AuthStorageService.getToken();
+        h = await headersAsync(newToken);
+        response = await requestFn(h);
+      }
+    }
+    return response;
   }
 
   // 1. Health Check
@@ -145,10 +171,9 @@ class ApiClient {
   // 4. Orders: Create Order (correct payload for Go backend)
   static Future<Map<String, dynamic>> createOrder(String token, Map<String, dynamic> orderData) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/orders'),
-        headers: headers(token),
-        body: jsonEncode(orderData),
+      final response = await sendAuthenticatedRequest(
+        (h) => http.post(Uri.parse('$baseUrl/orders'), headers: h, body: jsonEncode(orderData)),
+        explicitToken: token,
       );
       return jsonDecode(response.body);
     } catch (e) {
@@ -156,14 +181,20 @@ class ApiClient {
     }
   }
 
-  // 5. Orders: List User Orders
-  static Future<Map<String, dynamic>> getUserOrders(String token) async {
+  static Future<Map<String, dynamic>> getUserOrders([String? token]) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/orders'),
-        headers: headers(token),
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/orders'), headers: h),
+        explicitToken: token,
       );
-      return jsonDecode(response.body);
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        if (response.statusCode == 401) {
+          decoded['error_code'] = 'UNAUTHORIZED';
+        }
+        return decoded;
+      }
+      return {'success': false, 'message': 'استجابة غير صالحة'};
     } catch (e) {
       return {'success': false, 'message': 'فشل جلب الطلبات: $e'};
     }
@@ -172,9 +203,9 @@ class ApiClient {
   // 5b. Orders: Get Single Order by ID (with full relations)
   static Future<Map<String, dynamic>> getOrderById(String token, String orderId) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/orders/$orderId'),
-        headers: headers(token),
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/orders/$orderId'), headers: h),
+        explicitToken: token,
       );
       return jsonDecode(response.body);
     } catch (e) {
@@ -185,9 +216,9 @@ class ApiClient {
   // 5c. Orders: Cancel an Order
   static Future<Map<String, dynamic>> cancelOrder(String token, String orderId) async {
     try {
-      final response = await http.delete(
-        Uri.parse('$baseUrl/orders/$orderId'),
-        headers: headers(token),
+      final response = await sendAuthenticatedRequest(
+        (h) => http.delete(Uri.parse('$baseUrl/orders/$orderId'), headers: h),
+        explicitToken: token,
       );
       return jsonDecode(response.body);
     } catch (e) {
@@ -195,10 +226,56 @@ class ApiClient {
     }
   }
 
-  // 6. Cart: Get Cart Items & Add
-  static Future<Map<String, dynamic>> getCart(String token) async {
+  // 5d. Support Tickets: List User Tickets
+  static Future<Map<String, dynamic>> getSupportTickets() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/cart'), headers: headers(token));
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/support/tickets'), headers: h),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب تذاكر الدعم الفني: $e'};
+    }
+  }
+
+  // 5e. Support Tickets: Create Ticket
+  static Future<Map<String, dynamic>> createSupportTicket({required String message, String? subject}) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.post(
+          Uri.parse('$baseUrl/support/tickets'),
+          headers: h,
+          body: jsonEncode({
+            'subject': subject ?? 'بلاغ / استفسار عام',
+            'message': message,
+          }),
+        ),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل إرسال تذكرة الدعم: $e'};
+    }
+  }
+
+  // 5f. Saved Calculations: List User Calculations
+  static Future<Map<String, dynamic>> getSavedCalculations() async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/user/calculations'), headers: h),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب الحسابات المحفوظة: $e'};
+    }
+  }
+
+  // 6. Cart: Get Cart Items & Add
+  static Future<Map<String, dynamic>> getCart([String? token]) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/cart'), headers: h),
+        explicitToken: token,
+      );
       return jsonDecode(response.body);
     } catch (e) {
       return {'success': false, 'message': 'فشل جلب السلة'};
@@ -206,9 +283,12 @@ class ApiClient {
   }
 
   // 7. Wallet: Get Balance
-  static Future<Map<String, dynamic>> getWalletBalance(String token) async {
+  static Future<Map<String, dynamic>> getWalletBalance([String? token]) async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/wallet/balance'), headers: headers(token));
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/wallet/balance'), headers: h),
+        explicitToken: token,
+      );
       return jsonDecode(response.body);
     } catch (e) {
       return {'success': false, 'message': 'فشل جلب رصيد المحفظة'};
@@ -507,8 +587,10 @@ class ApiClient {
   // 11. Profile
   static Future<Map<String, dynamic>> getUserProfile([String? token]) async {
     try {
-      final h = await headersAsync(token);
-      final response = await http.get(Uri.parse('$baseUrl/user/profile'), headers: h);
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/user/profile'), headers: h),
+        explicitToken: token,
+      );
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
@@ -518,14 +600,29 @@ class ApiClient {
     }
   }
 
+  // 11b. Fetch profile from API and save to local storage
+  static Future<Map<String, dynamic>?> fetchAndSaveUserProfile() async {
+    try {
+      final res = await getUserProfile();
+      if (res['success'] == true && res['data'] != null && res['data'] is Map<String, dynamic>) {
+        final data = Map<String, dynamic>.from(res['data']);
+        await AuthStorageService.saveUser(data);
+        return data;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   // 12. Wallet Topup
   static Future<Map<String, dynamic>> topUpWallet(double amountUSD, [String? token]) async {
     try {
-      final h = await headersAsync(token);
-      final response = await http.post(
-        Uri.parse('$baseUrl/wallet/topup'),
-        headers: h,
-        body: jsonEncode({'amount_usd': amountUSD}),
+      final response = await sendAuthenticatedRequest(
+        (h) => http.post(
+          Uri.parse('$baseUrl/wallet/topup'),
+          headers: h,
+          body: jsonEncode({'amount_usd': amountUSD}),
+        ),
+        explicitToken: token,
       );
       return jsonDecode(response.body);
     } catch (e) {
@@ -536,8 +633,10 @@ class ApiClient {
   // 13. Admin Stats & Audit Logs
   static Future<Map<String, dynamic>> getAdminStats([String? token]) async {
     try {
-      final h = await headersAsync(token);
-      final response = await http.get(Uri.parse('$baseUrl/admin/stats'), headers: h);
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/admin/stats'), headers: h),
+        explicitToken: token,
+      );
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
@@ -549,8 +648,10 @@ class ApiClient {
 
   static Future<Map<String, dynamic>> getAuditLogs([String? token]) async {
     try {
-      final h = await headersAsync(token);
-      final response = await http.get(Uri.parse('$baseUrl/admin/audit-logs'), headers: h);
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/admin/audit-logs'), headers: h),
+        explicitToken: token,
+      );
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
@@ -589,10 +690,11 @@ class ApiClient {
   // 16. Notifications
   static Future<Map<String, dynamic>> getNotifications({int page = 1, int perPage = 20}) async {
     try {
-      final h = await headersAsync();
-      final response = await http.get(
-        Uri.parse('$baseUrl/notifications?page=$page&per_page=$perPage'),
-        headers: h,
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(
+          Uri.parse('$baseUrl/notifications?page=$page&per_page=$perPage'),
+          headers: h,
+        ),
       );
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -605,10 +707,11 @@ class ApiClient {
 
   static Future<Map<String, dynamic>> getUnreadNotificationCount() async {
     try {
-      final h = await headersAsync();
-      final response = await http.get(
-        Uri.parse('$baseUrl/notifications/unread-count'),
-        headers: h,
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(
+          Uri.parse('$baseUrl/notifications/unread-count'),
+          headers: h,
+        ),
       );
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -621,10 +724,11 @@ class ApiClient {
 
   static Future<Map<String, dynamic>> markNotificationAsRead(String notificationId) async {
     try {
-      final h = await headersAsync();
-      final response = await http.put(
-        Uri.parse('$baseUrl/notifications/$notificationId/read'),
-        headers: h,
+      final response = await sendAuthenticatedRequest(
+        (h) => http.put(
+          Uri.parse('$baseUrl/notifications/$notificationId/read'),
+          headers: h,
+        ),
       );
       return jsonDecode(response.body);
     } catch (e) {
@@ -634,10 +738,11 @@ class ApiClient {
 
   static Future<Map<String, dynamic>> markAllNotificationsAsRead() async {
     try {
-      final h = await headersAsync();
-      final response = await http.put(
-        Uri.parse('$baseUrl/notifications/read-all'),
-        headers: h,
+      final response = await sendAuthenticatedRequest(
+        (h) => http.put(
+          Uri.parse('$baseUrl/notifications/read-all'),
+          headers: h,
+        ),
       );
       return jsonDecode(response.body);
     } catch (e) {
@@ -647,10 +752,11 @@ class ApiClient {
 
   static Future<Map<String, dynamic>> deleteNotification(String notificationId) async {
     try {
-      final h = await headersAsync();
-      final response = await http.delete(
-        Uri.parse('$baseUrl/notifications/$notificationId'),
-        headers: h,
+      final response = await sendAuthenticatedRequest(
+        (h) => http.delete(
+          Uri.parse('$baseUrl/notifications/$notificationId'),
+          headers: h,
+        ),
       );
       return jsonDecode(response.body);
     } catch (e) {
@@ -693,11 +799,12 @@ class ApiClient {
   // 18. Profile Update
   static Future<Map<String, dynamic>> updateProfile({required String fullName, required String phone, required String governorate, required String city}) async {
     try {
-      final h = await headersAsync();
-      final response = await http.put(
-        Uri.parse('$baseUrl/user/profile'),
-        headers: h,
-        body: jsonEncode({'full_name': fullName, 'phone': phone, 'governorate': governorate, 'city': city}),
+      final response = await sendAuthenticatedRequest(
+        (h) => http.put(
+          Uri.parse('$baseUrl/user/profile'),
+          headers: h,
+          body: jsonEncode({'full_name': fullName, 'phone': phone, 'governorate': governorate, 'city': city}),
+        ),
       );
       return jsonDecode(response.body);
     } catch (e) {
@@ -708,11 +815,12 @@ class ApiClient {
   // 19. Change Password
   static Future<Map<String, dynamic>> changePassword({required String oldPassword, required String newPassword}) async {
     try {
-      final h = await headersAsync();
-      final response = await http.put(
-        Uri.parse('$baseUrl/user/password'),
-        headers: h,
-        body: jsonEncode({'old_password': oldPassword, 'new_password': newPassword}),
+      final response = await sendAuthenticatedRequest(
+        (h) => http.put(
+          Uri.parse('$baseUrl/user/password'),
+          headers: h,
+          body: jsonEncode({'old_password': oldPassword, 'new_password': newPassword}),
+        ),
       );
       return jsonDecode(response.body);
     } catch (e) {

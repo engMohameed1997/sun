@@ -19,13 +19,25 @@ func NewNotificationHandler(repo *repository.NotificationRepository) *Notificati
 	return &NotificationHandler{repo: repo}
 }
 
-func (h *NotificationHandler) ListNotifications(c *gin.Context) {
+func getUserIDFromContext(c *gin.Context) (uuid.UUID, bool) {
 	userIDVal, ok := c.Get("user_id")
 	if !ok {
-		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
-		return
+		return uuid.Nil, false
 	}
-	userID, ok := userIDVal.(uuid.UUID)
+	switch v := userIDVal.(type) {
+	case uuid.UUID:
+		return v, true
+	case string:
+		u, err := uuid.Parse(v)
+		if err == nil {
+			return u, true
+		}
+	}
+	return uuid.Nil, false
+}
+
+func (h *NotificationHandler) ListNotifications(c *gin.Context) {
+	userID, ok := getUserIDFromContext(c)
 	if !ok {
 		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
 		return
@@ -56,12 +68,7 @@ func (h *NotificationHandler) ListNotifications(c *gin.Context) {
 }
 
 func (h *NotificationHandler) UnreadCount(c *gin.Context) {
-	userIDVal, ok := c.Get("user_id")
-	if !ok {
-		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
-		return
-	}
-	userID, ok := userIDVal.(uuid.UUID)
+	userID, ok := getUserIDFromContext(c)
 	if !ok {
 		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
 		return
@@ -75,6 +82,7 @@ func (h *NotificationHandler) UnreadCount(c *gin.Context) {
 
 	utils.SuccessResponse(c, http.StatusOK, "تم جلب العدد بنجاح", gin.H{
 		"unread_count": count,
+		"count":        count,
 	})
 }
 
@@ -86,8 +94,6 @@ func (h *NotificationHandler) MarkAsRead(c *gin.Context) {
 		return
 	}
 
-	// Ideally we would verify that the notification belongs to the user here
-	// For simplicity, we directly mark as read.
 	err = h.repo.MarkAsRead(c.Request.Context(), id)
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusInternalServerError, "حدث خطأ أثناء تحديث الإشعار", "INTERNAL_ERROR", err)
@@ -98,12 +104,7 @@ func (h *NotificationHandler) MarkAsRead(c *gin.Context) {
 }
 
 func (h *NotificationHandler) MarkAllAsRead(c *gin.Context) {
-	userIDVal, ok := c.Get("user_id")
-	if !ok {
-		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
-		return
-	}
-	userID, ok := userIDVal.(uuid.UUID)
+	userID, ok := getUserIDFromContext(c)
 	if !ok {
 		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
 		return

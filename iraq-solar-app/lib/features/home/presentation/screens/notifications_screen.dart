@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../core/services/auth_storage.dart';
+import '../../../../core/services/websocket_service.dart';
+import '../../../auth/presentation/screens/login_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({Key? key}) : super(key: key);
@@ -16,12 +21,28 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
   List<Map<String, dynamic>> _allNotifications = [];
   bool _isLoading = true;
   bool _hasError = false;
+  bool _isLoggedIn = true;
+  StreamSubscription<WSMessage>? _wsSub;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _fetchNotifications();
+    
+    // Subscribe to real-time notifications via WebSocket
+    _wsSub = WebSocketService.instance.messageStream.listen((msg) {
+      if (msg.event == 'notification.created' && msg.payload.isNotEmpty) {
+        final mapped = _mapNotification(msg.payload);
+        if (mounted) {
+          setState(() {
+            _allNotifications.insert(0, mapped);
+          });
+        }
+      } else if (msg.event == 'order.status_changed') {
+        _fetchNotifications();
+      }
+    });
   }
 
   Future<void> _fetchNotifications() async {
@@ -30,10 +51,26 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
       _hasError = false;
     });
 
+    final loggedIn = await AuthStorageService.isLoggedIn();
+    if (!loggedIn) {
+      if (mounted) {
+        setState(() {
+          _isLoggedIn = false;
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
+    setState(() {
+      _isLoggedIn = true;
+    });
+
     final res = await ApiClient.getNotifications(page: 1, perPage: 100);
     
-    if (res['success'] == true && res['data'] != null && res['data']['notifications'] != null) {
-      final List<dynamic> notifs = res['data']['notifications'];
+    if (res['success'] == true && res['data'] != null) {
+      final rawNotifs = res['data']['notifications'];
+      final List<dynamic> notifs = (rawNotifs != null && rawNotifs is List) ? rawNotifs : [];
       setState(() {
         _allNotifications = notifs.map((n) {
           return _mapNotification(n as Map<String, dynamic>);
@@ -115,6 +152,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
 
   @override
   void dispose() {
+    _wsSub?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -127,6 +165,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
           n['isRead'] = true;
         }
       });
+      // Sync unread count with WebSocket service
+      WebSocketService.instance.resetUnread();
       if (mounted) {
         AppNotification.showSuccess(
           context,
@@ -148,6 +188,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
       setState(() {
         item['isRead'] = true;
       });
+      WebSocketService.instance.decrementUnread();
     }
   }
 
@@ -236,6 +277,59 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
   Widget _buildBody() {
     if (_isLoading) {
       return _buildSkeleton();
+    }
+
+    if (!_isLoggedIn) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryGold.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.lock_outline_rounded, size: 54, color: AppTheme.primaryGold),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'سجّل الدخول لمشاهدة إشعاراتك',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.darkNavy),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'قم بتسجيل الدخول لمتابعة حالة طلباتك والتنبيهات الخاصة بحسابك',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: 200,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final loginSuccess = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SolarLoginScreen()),
+                    );
+                    if (loginSuccess == true) {
+                      _fetchNotifications();
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryGold,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Text('تسجيل الدخول', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     }
     
     if (_hasError) {

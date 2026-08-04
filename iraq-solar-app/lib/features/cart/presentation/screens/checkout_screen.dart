@@ -79,7 +79,35 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchGovernoratesAndFees();
+    _initData();
+  }
+
+  Future<void> _initData() async {
+    await _fetchGovernoratesAndFees();
+    await _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final user = await AuthStorageService.getUser();
+    if (user != null && mounted) {
+      setState(() {
+        _fullNameController.text = user['full_name'] ?? '';
+        _phoneController.text = user['phone'] ?? '';
+        _districtController.text = user['landmark'] ?? user['city'] ?? '';
+      });
+      final savedGov = user['governorate'];
+      if (savedGov != null && savedGov.toString().isNotEmpty) {
+        for (var g in _governorates) {
+          if (g['name_ar'] == savedGov) {
+            setState(() {
+              _selectedGovernorateId = g['id'] as int;
+              _selectedGovernorate = g['name_ar'] as String;
+            });
+            break;
+          }
+        }
+      }
+    }
   }
 
   Future<void> _fetchGovernoratesAndFees() async {
@@ -433,14 +461,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           String createdOrderId = '';
 
                           // Build the correct payload for the Go backend
+                          final cartItems = CartService.instance.items;
+                          final firstStoreId = cartItems.isNotEmpty ? cartItems.first.storeId : '';
+                          final firstBranchId = cartItems.isNotEmpty ? (cartItems.first.branchId ?? '') : '';
+
                           final orderData = {
-                            'total_amount_iqd': _totalIQD,
+                            'store_id': firstStoreId.isNotEmpty ? firstStoreId : null,
+                            'branch_id': firstBranchId.isNotEmpty ? firstBranchId : null,
                             'shipping_address':
                                 'محافظة $_selectedGovernorate - ${_districtController.text.trim()}',
                             'payment_method': _selectedPaymentMethod,
-                            'items': CartService.instance.items
+                            'items': cartItems
                                 .map((i) => {
                                       'product_id': i.id,
+                                      'store_id': i.storeId.isNotEmpty ? i.storeId : null,
+                                      'branch_id': (i.branchId != null && i.branchId!.isNotEmpty) ? i.branchId : null,
                                       'quantity': i.qty,
                                       'unit_price_iqd': i.priceIQD,
                                     })

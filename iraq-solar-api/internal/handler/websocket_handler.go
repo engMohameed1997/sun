@@ -3,11 +3,14 @@ package handler
 import (
 	"log"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
+	"github.com/iraq-solar/api/internal/domain"
 	"github.com/iraq-solar/api/internal/hub"
 )
 
@@ -15,30 +18,74 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		// In production, restrict to your domain
-		return true
+		// Read allowed origins from environment
+		allowedOriginsStr := os.Getenv("WS_ALLOWED_ORIGINS")
+		if allowedOriginsStr == "" {
+			// Development mode: allow all
+			return true
+		}
+
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+
+		allowedOrigins := strings.Split(allowedOriginsStr, ",")
+		for _, allowed := range allowedOrigins {
+			if strings.TrimSpace(allowed) == origin {
+				return true
+			}
+		}
+		return false
 	},
 }
 
-// WebSocketHandler manages WebSocket connections for the orders system.
+// WebSocketHandler manages WebSocket connections for the realtime system.
 type WebSocketHandler struct {
-	orderHub *hub.OrderHub
+	realtimeHub *hub.RealtimeHub
 }
 
-func NewWebSocketHandler(orderHub *hub.OrderHub) *WebSocketHandler {
-	return &WebSocketHandler{orderHub: orderHub}
+func NewWebSocketHandler(realtimeHub *hub.RealtimeHub) *WebSocketHandler {
+	return &WebSocketHandler{realtimeHub: realtimeHub}
 }
 
-// HandleAdminOrders upgrades the connection and registers the client in the OrderHub.
-// Requires authentication middleware to set user_id and user_role in context.
+// HandleAdminOrders upgrades the connection and registers the client in the RealtimeHub.
+// Requires authentication middleware to set user_id and role in context.
 //
 // Route: GET /ws/orders
 func (h *WebSocketHandler) HandleAdminOrders(c *gin.Context) {
-	// Extract identity from JWT middleware
+	client, err := h.upgradeAndCreateClient(c)
+	if err != nil {
+		return
+	}
+
+	h.realtimeHub.Register <- client
+	go client.WritePump()
+	go client.ReadPump()
+}
+
+// HandleAppNotifications upgrades the connection for app users (customers) to receive
+// real-time notifications (order status changes, new notifications, etc.).
+//
+// Route: GET /ws/notifications
+func (h *WebSocketHandler) HandleAppNotifications(c *gin.Context) {
+	client, err := h.upgradeAndCreateClient(c)
+	if err != nil {
+		return
+	}
+
+	h.realtimeHub.Register <- client
+	go client.WritePump()
+	go client.ReadPump()
+}
+
+// upgradeAndCreateClient extracts identity from context, upgrades to WebSocket, and creates a Client.
+func (h *WebSocketHandler) upgradeAndCreateClient(c *gin.Context) (*hub.Client, error) {
+	// Extract identity from JWT middleware (AuthMiddleware or WSAuthMiddleware)
 	userIDVal, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "غير مصرح"})
-		return
+		return nil, http.ErrAbortHandler
 	}
 
 	var userID string
@@ -49,12 +96,17 @@ func (h *WebSocketHandler) HandleAdminOrders(c *gin.Context) {
 		userID = v
 	default:
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "معرف المستخدم غير صالح"})
-		return
+		return nil, http.ErrAbortHandler
 	}
 
-	role := c.GetString("user_role")
-	if role == "" {
-		role = "admin" // default fallback — middleware should always set this
+	// Fixed: read "role" (not "user_role") — matches what AuthMiddleware/WSAuthMiddleware sets
+	roleVal, _ := c.Get("role")
+	role := "customer"
+	if roleVal != nil {
+		roleStr := strings.ToLower(strings.TrimSpace(string(roleVal.(domain.Role))))
+		if roleStr != "" {
+			role = roleStr
+		}
 	}
 
 	merchantID := c.GetString("merchant_id") // set by middleware for merchant role
@@ -63,11 +115,11 @@ func (h *WebSocketHandler) HandleAdminOrders(c *gin.Context) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("[WebSocketHandler] upgrade failed: %v", err)
-		return
+		return nil, err
 	}
 
 	client := &hub.Client{
-		Hub:        h.orderHub,
+		Hub:        h.realtimeHub,
 		Conn:       conn,
 		Send:       make(chan []byte, 256),
 		UserID:     userID,
@@ -75,10 +127,5 @@ func (h *WebSocketHandler) HandleAdminOrders(c *gin.Context) {
 		MerchantID: merchantID,
 	}
 
-	// Register client in the hub
-	h.orderHub.Register <- client
-
-	// Start goroutines for this client
-	go client.WritePump()
-	go client.ReadPump()
+	return client, nil
 }

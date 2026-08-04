@@ -40,6 +40,43 @@ func AuthMiddleware(authService *service.AuthService) gin.HandlerFunc {
 	}
 }
 
+// WSAuthMiddleware authenticates WebSocket connections using a JWT token from query param.
+// WebSocket clients cannot set HTTP headers after the initial handshake, so we read the
+// token from ?token=JWT query parameter instead.
+func WSAuthMiddleware(authService *service.AuthService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tokenStr := c.Query("token")
+		if tokenStr == "" {
+			// Fallback: also accept Authorization header (for testing via wscat etc.)
+			authHeader := c.GetHeader("Authorization")
+			if authHeader != "" {
+				parts := strings.Split(authHeader, " ")
+				if len(parts) == 2 && parts[0] == "Bearer" {
+					tokenStr = parts[1]
+				}
+			}
+		}
+
+		if tokenStr == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "token query parameter is required for WebSocket"})
+			c.Abort()
+			return
+		}
+
+		claims, err := authService.ValidateTokenWithContext(c.Request.Context(), tokenStr)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			c.Abort()
+			return
+		}
+
+		c.Set("user_id", claims.UserID)
+		c.Set("phone", claims.Phone)
+		c.Set("role", claims.Role)
+		c.Next()
+	}
+}
+
 func RequireRole(roles ...domain.Role) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		roleVal, exists := c.Get("role")
@@ -81,4 +118,3 @@ func RequirePermission(perm domain.Permission) gin.HandlerFunc {
 		c.Abort()
 	}
 }
-

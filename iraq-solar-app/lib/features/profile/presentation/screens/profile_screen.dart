@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/services/auth_storage.dart';
+import '../../../../core/services/websocket_service.dart';
 import '../../../../core/services/auth_guard.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
@@ -23,6 +24,9 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
   String _userRole = 'زبون معتمد';
   String _userName = '';
   String _userPhone = '';
+  int _ordersCount = 0;
+  int _savedCount = 0;
+  int _favStoresCount = 0;
   bool _isLoading = true;
   bool _isLoggedIn = false;
 
@@ -34,6 +38,7 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
 
   Future<void> _loadProfile() async {
     final isAuth = await AuthStorageService.isLoggedIn();
+    final token = await AuthStorageService.getToken();
     final user = await AuthStorageService.getUser();
 
     if (mounted) {
@@ -51,7 +56,8 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
       });
     }
 
-    if (isAuth) {
+    if (isAuth && token != null) {
+      // 1. Fetch User Profile
       final res = await ApiClient.getUserProfile();
       if (res['success'] == true && res['data'] != null && mounted) {
         final data = res['data'];
@@ -59,6 +65,33 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
           _userName = data['full_name'] ?? _userName;
           _userPhone = data['phone'] ?? _userPhone;
           _userRole = data['role'] == 'engineer' ? 'مهندس' : (data['role'] == 'installer' ? 'فني' : 'زبون معتمد');
+        });
+      }
+
+      // 2. Fetch User Orders Count
+      final ordersRes = await ApiClient.getUserOrders(token);
+      if (ordersRes['success'] == true && ordersRes['data'] is List && mounted) {
+        final ordersList = ordersRes['data'] as List;
+        setState(() {
+          _ordersCount = ordersList.length;
+        });
+      }
+
+      // 3. Fetch Saved Calculations Count
+      final calcsRes = await ApiClient.getSavedCalculations();
+      if (calcsRes['success'] == true && calcsRes['data'] is List && mounted) {
+        final calcsList = calcsRes['data'] as List;
+        setState(() {
+          _savedCount = calcsList.length;
+        });
+      }
+
+      // 4. Fetch Active Stores Count
+      final storesRes = await ApiClient.getStores();
+      if (storesRes['success'] == true && storesRes['data'] is List && mounted) {
+        final storesList = storesRes['data'] as List;
+        setState(() {
+          _favStoresCount = storesList.length;
         });
       }
     }
@@ -80,6 +113,8 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
+                WebSocketService.instance.disconnect();
+                WebSocketService.instance.resetUnread();
                 await AuthStorageService.logout();
                 if (!mounted) return;
                 Navigator.pop(ctx);
@@ -191,9 +226,9 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _buildStatItem('-', 'التصاميم المحفوظة'),
-                          _buildStatItem('-', 'سجل الطلبات'),
-                          _buildStatItem('-', 'المتاجر المفضلة'),
+                          _buildStatItem('$_savedCount', 'التصاميم المحفوظة'),
+                          _buildStatItem('$_ordersCount', 'سجل الطلبات'),
+                          _buildStatItem('$_favStoresCount', 'المتاجر المفضلة'),
                         ],
                       ),
                     ],
@@ -222,7 +257,7 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
                 () async {
                   final isAuth = await AuthGuard.requireAuth(context, reasonMessage: 'يرجى تسجيل الدخول لاستعراض تصاميم المنظومات الشمسية المحفوظة في حسابك.');
                   if (isAuth && mounted) {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SavedCalculationsScreen()));
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SavedCalculationsScreen())).then((_) => _loadProfile());
                   }
                 },
               ),
@@ -233,7 +268,7 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
                 () async {
                   final isAuth = await AuthGuard.requireAuth(context, reasonMessage: 'يرجى تسجيل الدخول لمتابعة سجل الطلبات وحالة التوصيل والمنظومات.');
                   if (isAuth && mounted) {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const MyOrdersHistoryScreen()));
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const MyOrdersHistoryScreen())).then((_) => _loadProfile());
                   }
                 },
               ),

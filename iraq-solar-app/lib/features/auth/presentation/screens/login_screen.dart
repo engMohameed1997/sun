@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/services/auth_storage.dart';
+import '../../../../core/services/websocket_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
 import 'register_screen.dart';
@@ -57,6 +58,9 @@ class _SolarLoginScreenState extends State<SolarLoginScreen> {
           'role': 'customer',
         });
       }
+      await ApiClient.fetchAndSaveUserProfile();
+      // Connect WebSocket for real-time notifications
+      WebSocketService.instance.connect();
       AppNotification.showSuccess(context, res['message'] ?? 'تم تسجيل الدخول بنجاح 🎉');
       if (mounted) {
         Navigator.of(context).pop(true);

@@ -5,10 +5,20 @@ import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/data/mock_products_repository.dart';
 import '../../../../core/widgets/product_image_widget.dart';
 import '../../../merchant/presentation/screens/store_detail_screen.dart';
+import '../../../home/presentation/widgets/search_filter_sheet.dart';
 import 'product_detail_screen.dart';
 
 class SolarCatalogScreen extends StatefulWidget {
-  const SolarCatalogScreen({Key? key}) : super(key: key);
+  final String? initialSearchQuery;
+  final int initialTabIndex;
+  final Map<String, dynamic>? initialFilters;
+
+  const SolarCatalogScreen({
+    Key? key,
+    this.initialSearchQuery,
+    this.initialTabIndex = 1,
+    this.initialFilters,
+  }) : super(key: key);
 
   @override
   State<SolarCatalogScreen> createState() => _SolarCatalogScreenState();
@@ -19,6 +29,7 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
   final TextEditingController _universalSearchController = TextEditingController();
   String _searchQuery = '';
   String _selectedCategory = 'الكل';
+  Map<String, dynamic>? _appliedFilters;
   final Set<String> _favoriteStoreIds = {'s1', 's2'};
 
   final List<String> _categories = [
@@ -36,7 +47,24 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    if (widget.initialFilters != null) {
+      _appliedFilters = Map<String, dynamic>.from(widget.initialFilters!);
+    }
+
+    final hasQuery = widget.initialSearchQuery != null && widget.initialSearchQuery!.isNotEmpty;
+    final hasFilters = _appliedFilters != null;
+
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: hasQuery || hasFilters ? widget.initialTabIndex : 0,
+    );
+
+    if (hasQuery) {
+      _universalSearchController.text = widget.initialSearchQuery!;
+      _searchQuery = widget.initialSearchQuery!;
+    }
+
     _fetchLiveApiData();
   }
 
@@ -133,19 +161,85 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
 
   List<Map<String, dynamic>> get _filteredProducts {
     return _crossStoreProducts.where((p) {
+      // 1. Category tab filter
       final matchesCat = _selectedCategory == 'الكل' || p['category'] == _selectedCategory;
-      final matchesSearch = _searchQuery.isEmpty ||
-          (p['name'] as String).toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          (p['storeName'] as String).toLowerCase().contains(_searchQuery.toLowerCase());
-      return matchesCat && matchesSearch;
+
+      // 2. Search query filter
+      final nameStr = (p['name'] ?? '').toString().toLowerCase();
+      final storeNameStr = (p['storeName'] ?? '').toString().toLowerCase();
+      final brandStr = (p['brand'] ?? '').toString().toLowerCase();
+      final q = _searchQuery.trim().toLowerCase();
+      final matchesSearch = q.isEmpty || nameStr.contains(q) || storeNameStr.contains(q) || brandStr.contains(q);
+
+      if (!matchesCat || !matchesSearch) return false;
+
+      // 3. Applied sheet filters
+      if (_appliedFilters != null) {
+        final comp = _appliedFilters!['component'];
+        if (comp != null && comp != 'جميع القطع') {
+          final compStr = comp.toString();
+          final pType = (p['type'] ?? '').toString().toLowerCase();
+          final pName = (p['name'] ?? '').toString().toLowerCase();
+          final pCat = (p['category'] ?? '').toString().toLowerCase();
+
+          if (compStr.contains('ألواح') && !pType.contains('panel') && !pName.contains('لوح') && !pCat.contains('لوح')) return false;
+          if (compStr.contains('انفيرتر') && !pType.contains('inverter') && !pName.contains('انفيرتر') && !pCat.contains('انفيرتر')) return false;
+          if (compStr.contains('بطاري') && !pType.contains('battery') && !pName.contains('بطار') && !pCat.contains('بطار')) return false;
+          if (compStr.contains('هياكل') && !pType.contains('structure') && !pName.contains('هيكل') && !pCat.contains('هيكل')) return false;
+          if (compStr.contains('كابل') && !pType.contains('cable') && !pName.contains('كابل') && !pCat.contains('كابل')) return false;
+        }
+
+        if (_appliedFilters!['verifiedOnly'] == true) {
+          if (p['is_verified'] != true) return false;
+        }
+
+        if (_appliedFilters!['warrantyOnly'] == true) {
+          final w = (p['warranty'] ?? '').toString();
+          if (w.isEmpty || w == 'بدون ضمان') return false;
+        }
+
+        final minP = _appliedFilters!['minPrice'];
+        final maxP = _appliedFilters!['maxPrice'];
+        final priceRaw = p['price_iqd'];
+        if (priceRaw != null && priceRaw is num && minP is num && maxP is num) {
+          final minIqd = minP * 1500;
+          final maxIqd = maxP * 1500;
+          if (priceRaw > 0 && (priceRaw < minIqd || priceRaw > maxIqd)) return false;
+        }
+
+        final minRating = _appliedFilters!['minRating'];
+        if (minRating != null && minRating is num) {
+          final rStr = (p['rating'] ?? '').toString().replaceAll('⭐', '').trim();
+          final rNum = double.tryParse(rStr) ?? 0.0;
+          if (rNum > 0 && rNum < minRating) return false;
+        }
+      }
+
+      return true;
     }).toList();
   }
 
   List<Map<String, dynamic>> get _filteredStores {
     return _stores.where((s) {
-      return _searchQuery.isEmpty ||
-          (s['name'] as String).toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          (s['city'] as String).toLowerCase().contains(_searchQuery.toLowerCase());
+      final nameStr = (s['name'] ?? '').toString().toLowerCase();
+      final cityStr = (s['city'] ?? '').toString().toLowerCase();
+      final q = _searchQuery.trim().toLowerCase();
+      final matchesSearch = q.isEmpty || nameStr.contains(q) || cityStr.contains(q);
+
+      if (!matchesSearch) return false;
+
+      if (_appliedFilters != null) {
+        final gov = _appliedFilters!['governorate'];
+        if (gov != null && gov != 'جميع المحافظات') {
+          final govStr = gov.toString().toLowerCase();
+          if (!cityStr.contains(govStr) && !nameStr.contains(govStr)) return false;
+        }
+        if (_appliedFilters!['verifiedOnly'] == true) {
+          if (s['verified'] != true) return false;
+        }
+      }
+
+      return true;
     }).toList();
   }
 
@@ -168,7 +262,7 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
           backgroundColor: AppTheme.darkNavy,
           elevation: 0,
           title: const Text(
-            'دليل المتاجر والبحث الشامل عن المنتجات',
+            'الالمتاجر والبحث عن المنتجات',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
           ),
           bottom: TabBar(
@@ -190,32 +284,70 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
             Container(
               color: AppTheme.darkNavy,
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: TextField(
-                  controller: _universalSearchController,
-                  onChanged: (val) => setState(() => _searchQuery = val),
-                  decoration: InputDecoration(
-                    hintText: 'ابحث عن منتج أو متجر معين عبر كافة المتاجر...',
-                    hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                    prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.primaryGold),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear_rounded, color: Colors.grey, size: 18),
-                            onPressed: () {
-                              _universalSearchController.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                          )
-                        : null,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: TextField(
+                        controller: _universalSearchController,
+                        onChanged: (val) => setState(() => _searchQuery = val),
+                        decoration: InputDecoration(
+                          hintText: 'ابحث عن منتج أو متجر معين عبر كافة المتاجر...',
+                          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                          prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.primaryGold),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear_rounded, color: Colors.grey, size: 18),
+                                  onPressed: () {
+                                    _universalSearchController.clear();
+                                    setState(() => _searchQuery = '');
+                                  },
+                                )
+                              : null,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () {
+                      SearchFilterSheet.show(context, onApply: (filters) {
+                        setState(() {
+                          _appliedFilters = filters;
+                          if (filters['scope'] == 'المتاجر المعتمدة') {
+                            _tabController.animateTo(0);
+                          } else if (filters['scope'] == 'القطع والمنتجات') {
+                            _tabController.animateTo(1);
+                          }
+                        });
+                        AppNotification.showSuccess(
+                          context,
+                          'تم تطبيق الفلترة لـ ${filters['scope']} في ${filters['governorate']}',
+                        );
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _appliedFilters != null ? AppTheme.primaryGold : Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: Icon(
+                        Icons.tune_rounded,
+                        color: _appliedFilters != null ? Colors.white : AppTheme.primaryGold,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
 

@@ -7,12 +7,22 @@ CREATE INDEX IF NOT EXISTS idx_orders_branch ON orders(branch_id);
 
 -- 2. Create helper view: v_orders_full
 --    Joins orders with users, stores, store_branches for admin queries
+--    Derives store_id & branch_id from order_items/products if NULL on order level
 CREATE OR REPLACE VIEW v_orders_full AS
+WITH order_derived_store AS (
+    SELECT DISTINCT ON (oi.order_id)
+        oi.order_id,
+        COALESCE(oi.store_id, p.store_id) AS store_id,
+        COALESCE(oi.branch_id, p.branch_id) AS branch_id
+    FROM order_items oi
+    LEFT JOIN products p ON oi.product_id = p.id
+    ORDER BY oi.order_id, oi.id
+)
 SELECT
     o.id,
     o.user_id,
-    o.store_id,
-    o.branch_id,
+    COALESCE(o.store_id, ods.store_id)   AS store_id,
+    COALESCE(o.branch_id, ods.branch_id) AS branch_id,
     o.status,
     o.total_amount_iqd,
     o.shipping_address,
@@ -38,10 +48,11 @@ SELECT
     g.name_ar     AS branch_governorate_ar,
     g.name_en     AS branch_governorate_en
 FROM orders o
-LEFT JOIN users          u ON o.user_id    = u.id
-LEFT JOIN stores         s ON o.store_id   = s.id
-LEFT JOIN store_branches b ON o.branch_id  = b.id
-LEFT JOIN governorates   g ON b.governorate_id = g.id;
+LEFT JOIN order_derived_store ods ON o.id = ods.order_id
+LEFT JOIN users          u ON o.user_id                            = u.id
+LEFT JOIN stores         s ON COALESCE(o.store_id, ods.store_id)   = s.id
+LEFT JOIN store_branches b ON COALESCE(o.branch_id, ods.branch_id) = b.id
+LEFT JOIN governorates   g ON b.governorate_id                     = g.id;
 
 -- 3. Ensure order_items also carries branch_id for per-item store/branch tracking
 ALTER TABLE order_items ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES store_branches(id) ON DELETE SET NULL;

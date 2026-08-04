@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jmoiron/sqlx"
 
 	"github.com/iraq-solar/api/internal/config"
 	"github.com/iraq-solar/api/internal/database"
@@ -31,44 +30,42 @@ func main() {
 	cfg := config.Load()
 
 	// 2. Initialize Database Connection
-	var dbPool *sqlx.DB
 	db, err := database.Connect(cfg.DatabaseURL)
 	if err != nil {
-		log.Printf("Warning: DB Connection issue: %v", err)
-	} else if db != nil {
-		dbPool = db
-		defer db.Close()
-		_ = database.SeedDatabase(dbPool)
+		log.Fatalf("Fatal: DB Connection failed: %v", err)
 	}
+	defer db.Close()
+	_ = database.SeedDatabase(db)
 
 	// 3. Initialize Repositories
-	userRepo := repository.NewUserRepository(dbPool)
-	secRepo := repository.NewAuthSecurityRepository(dbPool)
-	storeRepo := repository.NewStoreRepository(dbPool)
-	productRepo := repository.NewProductRepository(dbPool)
-	categoryRepo := repository.NewCategoryRepository(dbPool)
-	brandRepo := repository.NewBrandRepository(dbPool)
-	calcRepo := repository.NewSolarCalculationRepository(dbPool)
-	orderRepo := repository.NewOrderRepository(dbPool)
-	adminRepo := repository.NewAdminRepository(dbPool)
-	governorateRepo := repository.NewGovernorateRepository(dbPool)
-	bannerRepo := repository.NewBannerRepository(dbPool)
-	notificationRepo := repository.NewNotificationRepository(dbPool)
+	userRepo := repository.NewUserRepository(db)
+	secRepo := repository.NewAuthSecurityRepository(db)
+	storeRepo := repository.NewStoreRepository(db)
+	productRepo := repository.NewProductRepository(db)
+	categoryRepo := repository.NewCategoryRepository(db)
+	brandRepo := repository.NewBrandRepository(db)
+	calcRepo := repository.NewSolarCalculationRepository(db)
+	orderRepo := repository.NewOrderRepository(db)
+	adminRepo := repository.NewAdminRepository(db)
+	governorateRepo := repository.NewGovernorateRepository(db)
+	bannerRepo := repository.NewBannerRepository(db)
+	notificationRepo := repository.NewNotificationRepository(db)
+	ticketRepo := repository.NewSupportTicketRepository(db)
 
-	// 4. Initialize WebSocket Hub
-	orderHub := hub.NewOrderHub()
-	go orderHub.Run()
-	log.Println("OrderHub started")
+	// 4. Initialize WebSocket Hub (RealtimeHub — handles all realtime connections)
+	realtimeHub := hub.NewRealtimeHub()
+	go realtimeHub.Run()
+	log.Println("RealtimeHub started")
 
 	// 5. Initialize Services
 	storeService := service.NewStoreService(storeRepo, userRepo)
 	authService := service.NewAuthService(cfg.JWTSecret, userRepo, secRepo)
 	calcService := service.NewSolarCalculatorService(calcRepo)
-	orderService := service.NewOrderService(orderRepo, productRepo, orderHub)
+	notificationService := service.NewNotificationService(notificationRepo, realtimeHub)
+	orderService := service.NewOrderService(orderRepo, productRepo, realtimeHub, notificationService)
 	orderService.StartPendingOrdersCleanupCron(context.Background(), 15*time.Minute, 24)
 	adminService := service.NewAdminService(adminRepo, governorateRepo, bannerRepo, notificationRepo)
-	notificationService := service.NewNotificationService(notificationRepo)
-	_ = notificationService // retained for notifications WS endpoint
+	ticketService := service.NewSupportTicketService(ticketRepo)
 
 	minioService, minioErr := service.NewMinIOService(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey, cfg.MinIOBucket, cfg.MinIOUseSSL)
 	if minioErr != nil {
@@ -86,10 +83,11 @@ func main() {
 	orderHandler := handler.NewOrderHandler(orderService)
 	adminHandler := handler.NewAdminHandler(adminService)
 	uploadHandler := handler.NewUploadHandler(minioService)
-	wsHandler := handler.NewWebSocketHandler(orderHub)
+	wsHandler := handler.NewWebSocketHandler(realtimeHub)
 	notifHandler := handler.NewNotificationHandler(notificationRepo)
 	installerHandler := handler.NewInstallerHandler(userRepo)
 	profileHandler := handler.NewProfileHandler(userRepo)
+	ticketHandler := handler.NewSupportTicketHandler(ticketService)
 
 	// 6. Setup Gin Router & Global Security Middlewares
 	if cfg.Environment == "production" {
@@ -106,7 +104,7 @@ func main() {
 	// Health Check Endpoint
 	router.GET("/health", func(c *gin.Context) {
 		dbStatus := "disconnected"
-		if dbPool != nil && dbPool.Ping() == nil {
+		if db != nil && db.Ping() == nil {
 			dbStatus = "connected"
 		}
 
@@ -174,14 +172,26 @@ func main() {
 			productGroup.GET("", productHandler.ListProducts)
 		}
 
+		// --- WebSocket Routes (use WSAuthMiddleware — token via query param) ---
+		// App users: real-time notifications
+		v1.GET("/ws/notifications", middleware.WSAuthMiddleware(authService), wsHandler.HandleAppNotifications)
+
 		// Protected Routes (Requires JWT Auth)
 		protected := v1.Group("")
 		protected.Use(middleware.AuthMiddleware(authService))
 		{
-			// User Profile Management
+			// User Profile & Calculations Management
 			protected.GET("/user/profile", profileHandler.GetProfile)
 			protected.PUT("/user/profile", profileHandler.UpdateProfile)
 			protected.PUT("/user/password", profileHandler.ChangePassword)
+			protected.GET("/user/calculations", calcHandler.ListUserCalculations)
+
+			// Support Tickets Routes
+			supportGroup := protected.Group("/support/tickets")
+			{
+				supportGroup.POST("", ticketHandler.CreateTicket)
+				supportGroup.GET("", ticketHandler.ListUserTickets)
+			}
 
 			// Orders Management Routes
 			ordersGroup := protected.Group("/orders")
@@ -238,7 +248,7 @@ func main() {
 				notifGroup.DELETE("/:id", notifHandler.DeleteNotification)
 			}
 
-			// Notifications WebSocket (legacy)
+			// Notifications WebSocket (legacy — kept for admin React dashboard)
 			protected.GET("/admin/notifications/ws", wsHandler.HandleAdminOrders)
 
 			// Orders WebSocket — real-time order events for admins & merchants

@@ -99,6 +99,14 @@ func (s *SolarCalculatorService) CalculateSystem(ctx context.Context, req domain
 	return recommendation
 }
 
+func (s *SolarCalculatorService) GetUserCalculations(ctx context.Context, userID uuid.UUID) ([]domain.SolarCalculation, error) {
+	if s.calcRepo != nil {
+		return s.calcRepo.FindByUserID(ctx, userID)
+	}
+	return []domain.SolarCalculation{}, nil
+}
+
+
 // --- Homeowner Calculators Implementation ---
 
 func (s *SolarCalculatorService) CalculateROI(ctx context.Context, req domain.ROICalculationRequest) domain.ROICalculationResponse {

@@ -32,10 +32,13 @@ func (r *NotificationRepository) ListByRecipient(ctx context.Context, recipientI
 	offset := (page - 1) * perPage
 
 	var total int
-	r.db.GetContext(ctx, &total, "SELECT COUNT(*) FROM notifications WHERE recipient_id = $1", recipientID)
+	_ = r.db.GetContext(ctx, &total, "SELECT COUNT(*) FROM notifications WHERE recipient_id = $1", recipientID)
 
-	var notifications []domain.Notification
+	notifications := make([]domain.Notification, 0)
 	err := r.db.SelectContext(ctx, &notifications, `SELECT * FROM notifications WHERE recipient_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`, recipientID, perPage, offset)
+	if notifications == nil {
+		notifications = make([]domain.Notification, 0)
+	}
 	return notifications, total, err
 }
 

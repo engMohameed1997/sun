@@ -1,48 +1,53 @@
 package service
 
 import (
-	"net/http"
-	"sync"
-	"github.com/gorilla/websocket"
+	"context"
+	"encoding/json"
+
+	"github.com/google/uuid"
+
+	"github.com/iraq-solar/api/internal/domain"
+	"github.com/iraq-solar/api/internal/hub"
 	"github.com/iraq-solar/api/internal/repository"
 )
 
+// NotificationService handles notification business logic (CRUD + realtime broadcast).
+// The WebSocket transport is delegated entirely to RealtimeHub.
 type NotificationService struct {
-	repo     *repository.NotificationRepository
-	upgrader websocket.Upgrader
-	clients  map[*websocket.Conn]string // conn -> userID
-	mu       sync.Mutex
+	repo *repository.NotificationRepository
+	hub  *hub.RealtimeHub
 }
 
-func NewNotificationService(repo *repository.NotificationRepository) *NotificationService {
+// NewNotificationService creates a new NotificationService.
+func NewNotificationService(repo *repository.NotificationRepository, realtimeHub *hub.RealtimeHub) *NotificationService {
 	return &NotificationService{
 		repo: repo,
-		upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool { return true },
-		},
-		clients: make(map[*websocket.Conn]string),
+		hub:  realtimeHub,
 	}
 }
 
-func (s *NotificationService) HandleWebSocket(w http.ResponseWriter, r *http.Request, userID string) {
-	conn, err := s.upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		return
+// Create creates a notification in the DB and broadcasts it to the recipient via WebSocket.
+func (s *NotificationService) Create(ctx context.Context, recipientID uuid.UUID, notifType domain.NotificationType, title, body string, data json.RawMessage) (*domain.Notification, error) {
+	notification := &domain.Notification{
+		ID:          uuid.New(),
+		RecipientID: recipientID,
+		Type:        notifType,
+		Title:       title,
+		Body:        body,
+		Data:        data,
+		IsRead:      false,
 	}
-	s.mu.Lock()
-	s.clients[conn] = userID
-	s.mu.Unlock()
 
-	defer func() {
-		s.mu.Lock()
-		delete(s.clients, conn)
-		s.mu.Unlock()
-		conn.Close()
-	}()
-
-	for {
-		if _, _, err := conn.ReadMessage(); err != nil {
-			break
+	if s.repo != nil {
+		if err := s.repo.Create(ctx, notification); err != nil {
+			return nil, err
 		}
 	}
+
+	// Broadcast to the recipient's connected devices
+	if s.hub != nil {
+		go s.hub.BroadcastToUser(recipientID.String(), hub.MsgNotif, hub.EventNotificationCreated, notification)
+	}
+
+	return notification, nil
 }

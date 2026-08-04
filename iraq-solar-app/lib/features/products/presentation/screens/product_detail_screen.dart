@@ -279,6 +279,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                     title: p['name'] ?? 'منتج شمسي',
                                     storeName: p['store'] ?? 'متجر طاقة معتمد',
                                     storeId: p['store_id']?.toString() ?? '',
+                                    branchId: p['branch_id']?.toString(),
                                     priceIQD: priceRaw is int ? priceRaw : 175000,
                                     qty: _quantity,
                                   );

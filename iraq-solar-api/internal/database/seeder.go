@@ -13,6 +13,52 @@ func SeedDatabase(db *sqlx.DB) error {
 		return nil
 	}
 
+	// 0. Ensure v_orders_full view exists
+	_, _ = db.Exec(`
+		CREATE OR REPLACE VIEW v_orders_full AS
+		WITH order_derived_store AS (
+			SELECT DISTINCT ON (oi.order_id)
+				oi.order_id,
+				COALESCE(oi.store_id, p.store_id) AS store_id,
+				COALESCE(oi.branch_id, p.branch_id) AS branch_id
+			FROM order_items oi
+			LEFT JOIN products p ON oi.product_id = p.id
+			ORDER BY oi.order_id, oi.id
+		)
+		SELECT
+			o.id,
+			o.user_id,
+			COALESCE(o.store_id, ods.store_id)   AS store_id,
+			COALESCE(o.branch_id, ods.branch_id) AS branch_id,
+			o.status,
+			o.total_amount_iqd,
+			o.shipping_address,
+			o.payment_method,
+			o.payment_status,
+			o.created_at,
+			o.updated_at,
+			u.full_name   AS customer_name,
+			u.phone       AS customer_phone,
+			u.governorate AS customer_governorate,
+			u.city        AS customer_city,
+			s.name        AS store_name,
+			s.slug        AS store_slug,
+			s.logo_url    AS store_logo_url,
+			s.phone       AS store_phone,
+			b.name        AS branch_name,
+			b.address     AS branch_address,
+			b.city        AS branch_city,
+			b.phone       AS branch_phone,
+			g.name_ar     AS branch_governorate_ar,
+			g.name_en     AS branch_governorate_en
+		FROM orders o
+		LEFT JOIN order_derived_store ods ON o.id = ods.order_id
+		LEFT JOIN users          u ON o.user_id                            = u.id
+		LEFT JOIN stores         s ON COALESCE(o.store_id, ods.store_id)   = s.id
+		LEFT JOIN store_branches b ON COALESCE(o.branch_id, ods.branch_id) = b.id
+		LEFT JOIN governorates   g ON b.governorate_id                     = g.id;
+	`)
+
 	// 1. Seed Categories if empty
 	var catCount int
 	err := db.Get(&catCount, "SELECT COUNT(*) FROM categories")

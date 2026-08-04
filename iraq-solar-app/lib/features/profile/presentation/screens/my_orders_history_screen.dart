@@ -4,6 +4,7 @@ import '../../../../core/services/auth_storage.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../cart/presentation/screens/order_details_screen.dart';
+import '../../../auth/presentation/screens/login_screen.dart';
 
 // ─── Order status helpers ────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ class _MyOrdersHistoryScreenState extends State<MyOrdersHistoryScreen> with Sing
   List<Map<String, dynamic>> _rawOrders = [];
   bool _isLoading = true;
   bool _hasError = false;
+  bool _isUnauthenticated = false;
   String _searchQuery = '';
   final TextEditingController _searchCtrl = TextEditingController();
 
@@ -85,24 +87,41 @@ class _MyOrdersHistoryScreenState extends State<MyOrdersHistoryScreen> with Sing
   }
 
   Future<void> _loadOrders() async {
-    setState(() { _isLoading = true; _hasError = false; });
-    final token = await AuthStorageService.getToken();
-    if (token == null) {
-      setState(() { _isLoading = false; _hasError = true; });
+    setState(() { _isLoading = true; _hasError = false; _isUnauthenticated = false; });
+    var token = await AuthStorageService.getToken();
+    if (token == null || token.isEmpty) {
+      final refreshed = await ApiClient.refreshTokenApi();
+      if (refreshed) {
+        token = await AuthStorageService.getToken();
+      }
+    }
+    if (token == null || token.isEmpty) {
+      setState(() { _isLoading = false; _isUnauthenticated = true; _hasError = false; });
       return;
     }
     try {
       final res = await ApiClient.getUserOrders(token);
-      if (res['success'] == true && res['data'] is List) {
+      if (res['success'] == true) {
+        final data = res['data'];
+        final List<Map<String, dynamic>> ordersList = (data != null && data is List)
+            ? (data as List).cast<Map<String, dynamic>>()
+            : [];
         setState(() {
-          _rawOrders = (res['data'] as List).cast<Map<String, dynamic>>();
+          _rawOrders = ordersList;
           _isLoading = false;
+          _hasError = false;
+          _isUnauthenticated = false;
         });
+      } else if (res['error_code'] == 'UNAUTHORIZED' ||
+                 res['error'] != null ||
+                 res['message']?.toString().contains('غير مصرح') == true ||
+                 res['message']?.toString().contains('Authorization') == true) {
+        setState(() { _isLoading = false; _isUnauthenticated = true; _hasError = false; });
       } else {
-        setState(() { _isLoading = false; _hasError = res['data'] == null; });
+        setState(() { _isLoading = false; _hasError = true; _isUnauthenticated = false; });
       }
     } catch (_) {
-      setState(() { _isLoading = false; _hasError = true; });
+      setState(() { _isLoading = false; _hasError = true; _isUnauthenticated = false; });
     }
   }
 
@@ -202,18 +221,74 @@ class _MyOrdersHistoryScreenState extends State<MyOrdersHistoryScreen> with Sing
         ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryGold))
-            : _hasError
-                ? _buildError()
-                : TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildList(null),
-                      _buildList('pending'),
-                      _buildList('confirmed'),
-                      _buildList('processing'),
-                      _buildList('completed'),
-                    ],
-                  ),
+            : _isUnauthenticated
+                ? _buildAuthRequired()
+                : _hasError
+                    ? _buildError()
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildList(null),
+                          _buildList('pending'),
+                          _buildList('confirmed'),
+                          _buildList('processing'),
+                          _buildList('completed'),
+                        ],
+                      ),
+      ),
+    );
+  }
+
+  Widget _buildAuthRequired() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryGold.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.lock_person_rounded, size: 42, color: AppTheme.primaryGold),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'تسجيل الدخول مطلوب',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppTheme.darkNavy),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'يرجى تسجيل الدخول أو إنشاء حساب جديد لاستعراض سجل طلبات الشراء والمنظومات وحالتها الميدانية.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final success = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SolarLoginScreen()),
+                );
+                if (success == true || mounted) {
+                  _loadOrders();
+                }
+              },
+              icon: const Icon(Icons.login_rounded, size: 18),
+              label: const Text('تسجيل الدخول / إنشاء حساب', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryGold,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 2,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -253,9 +328,20 @@ class _MyOrdersHistoryScreenState extends State<MyOrdersHistoryScreen> with Sing
           children: [
             Icon(Icons.shopping_bag_outlined, size: 72, color: Colors.grey.shade300),
             const SizedBox(height: 12),
-            const Text('لا توجد طلبات', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.darkNavy)),
+            const Text('لا توجد طلبات في هذه الفئة', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.darkNavy)),
             const SizedBox(height: 4),
-            const Text('لم تقدّم طلبات في هذه الفئة بعد', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const Text('استعرض المتاجر والمنتجات لإضافة منتجاتك وتأكيد طلبات الشراء.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.storefront_rounded, size: 18),
+              label: const Text('تصفح المتاجر والمنتجات', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.darkNavy,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
           ],
         ),
       );

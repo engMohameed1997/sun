@@ -21,12 +21,21 @@ func Connect(dbURL string) (*sqlx.DB, error) {
 	db.SetConnMaxLifetime(15 * time.Minute)
 	db.SetConnMaxIdleTime(5 * time.Minute)
 
-	if err := db.Ping(); err != nil {
-		log.Printf("Warning: Database ping failed (%v). Continuing in standalone/offline mode if needed.", err)
-		db.Close()
-		return nil, nil
+	// Retry connection with backoff to handle database startup timing
+	maxRetries := 10
+	retryDelay := 3 * time.Second
+	for i := 1; i <= maxRetries; i++ {
+		if err := db.Ping(); err == nil {
+			log.Println("Successfully connected to PostgreSQL database.")
+			return db, nil
+		} else {
+			log.Printf("Database ping attempt %d/%d failed: %v", i, maxRetries, err)
+			if i < maxRetries {
+				time.Sleep(retryDelay)
+			}
+		}
 	}
 
-	log.Println("Successfully connected to PostgreSQL database.")
-	return db, nil
+	db.Close()
+	return nil, fmt.Errorf("failed to connect to database after %d attempts", maxRetries)
 }

@@ -19,6 +19,7 @@ type OrderRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*domain.Order, error)
 	FindFullByID(ctx context.Context, id uuid.UUID) (*domain.OrderFull, error)
 	FindByUserID(ctx context.Context, userID uuid.UUID) ([]domain.Order, error)
+	FindFullByUserID(ctx context.Context, userID uuid.UUID) ([]domain.OrderFull, error)
 	FindAllAdmin(ctx context.Context, filters domain.AdminOrderFilters) (*domain.AdminOrdersResponse, error)
 	GetStatusHistory(ctx context.Context, orderID uuid.UUID) ([]domain.OrderStatusHistory, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status domain.OrderStatus, notes string, changedBy *uuid.UUID) error
@@ -158,7 +159,7 @@ func (r *postgresOrderRepository) FindFullByID(ctx context.Context, id uuid.UUID
 			oi.id, oi.order_id, oi.product_id, oi.store_id, oi.branch_id,
 			oi.quantity, oi.unit_price_iqd, oi.total_price_iqd,
 			p.name AS product_name, p.sku AS product_sku,
-			COALESCE(p.images->0, NULL)::text AS product_image
+			COALESCE(p.images[1], NULL) AS product_image
 		FROM order_items oi
 		LEFT JOIN products p ON oi.product_id = p.id
 		WHERE oi.order_id = $1
@@ -185,6 +186,43 @@ func (r *postgresOrderRepository) FindByUserID(ctx context.Context, userID uuid.
 	if err != nil {
 		return nil, fmt.Errorf("failed to list user orders: %w", err)
 	}
+	return orders, nil
+}
+
+// ─── FindFullByUserID (with all JOINs) ─────────────────────────────────────
+
+func (r *postgresOrderRepository) FindFullByUserID(ctx context.Context, userID uuid.UUID) ([]domain.OrderFull, error) {
+	if r.db == nil {
+		return []domain.OrderFull{}, nil
+	}
+	orders := []domain.OrderFull{}
+	query := orderFullSelectSQL + ` WHERE user_id = $1 ORDER BY created_at DESC`
+	err := r.db.SelectContext(ctx, &orders, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list user full orders: %w", err)
+	}
+
+	if orders == nil {
+		orders = []domain.OrderFull{}
+	}
+
+	// Fetch items for each order
+	for i := range orders {
+		items := []domain.OrderItemFull{}
+		itemsQuery := `
+			SELECT
+				oi.id, oi.order_id, oi.product_id, oi.store_id, oi.branch_id,
+				oi.quantity, oi.unit_price_iqd, oi.total_price_iqd,
+				p.name AS product_name, p.sku AS product_sku,
+				COALESCE(p.images[1], NULL) AS product_image
+			FROM order_items oi
+			LEFT JOIN products p ON oi.product_id = p.id
+			WHERE oi.order_id = $1
+			`
+		_ = r.db.SelectContext(ctx, &items, itemsQuery, orders[i].ID)
+		orders[i].Items = items
+	}
+
 	return orders, nil
 }
 

@@ -3,13 +3,14 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/services/auth_storage.dart';
+import '../../../../core/services/websocket_service.dart';
 import 'notifications_screen.dart';
+import '../../../auth/presentation/screens/login_screen.dart';
 import '../widgets/search_filter_sheet.dart';
 import '../widgets/banner_carousel.dart';
 import '../../../merchant/presentation/screens/store_detail_screen.dart';
 import '../../../products/presentation/screens/product_detail_screen.dart';
-import '../../../products/presentation/screens/promotions_catalog_screen.dart';
-import '../../../../core/data/mock_products_repository.dart';
+import '../../../products/presentation/screens/catalog_screen.dart';
 import '../../../../core/widgets/product_image_widget.dart';
 
 class SuperQiHomeScreen extends StatefulWidget {
@@ -23,6 +24,7 @@ class SuperQiHomeScreen extends StatefulWidget {
 
 class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
   final ScrollController _storesScrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
   List<Map<String, dynamic>> _storesList = [];
   List<Map<String, dynamic>> _productsList = [];
   List<Map<String, dynamic>> _installersList = [];
@@ -35,6 +37,13 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
     super.initState();
     _loadUserData();
     _fetchLiveData();
+  }
+
+  @override
+  void dispose() {
+    _storesScrollController.dispose();
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUserData() async {
@@ -52,6 +61,17 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
     }
 
     if (isAuth) {
+      // Connect WebSocket for real-time notifications
+      WebSocketService.instance.connect();
+
+      // Fetch initial unread count from REST API
+      final unreadRes = await ApiClient.getUnreadNotificationCount();
+      if (unreadRes['success'] == true && unreadRes['data'] != null) {
+        final rawCount = unreadRes['data']['unread_count'] ?? unreadRes['data']['count'] ?? 0;
+        final count = rawCount is int ? rawCount : (int.tryParse(rawCount.toString()) ?? 0);
+        WebSocketService.instance.setUnread(count);
+      }
+
       final profileRes = await ApiClient.getUserProfile();
       if (profileRes['success'] == true && profileRes['data'] != null && profileRes['data'] is Map) {
         final data = profileRes['data'] as Map<String, dynamic>;
@@ -187,6 +207,20 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
     }
   }
 
+  void _executeSearch(String query) {
+    final cleanQuery = query.trim();
+    if (cleanQuery.isNotEmpty) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SolarCatalogScreen(
+            initialSearchQuery: cleanQuery,
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -200,9 +234,9 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
               // 1. Header with Notifications Bell & Search Bar
               _buildSuperQiHeader(),
 
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
-              // 2. Interactive Auto-sliding Banner Carousel (بنرات الشاشة الرئيسية)
+              // 2. Interactive Auto-sliding Banner Carousel
               BannerCarouselWidget(
                 onBannerAction: (targetIndex) {
                   widget.onNavigateTab?.call(targetIndex);
@@ -211,35 +245,38 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
 
               const SizedBox(height: 24),
 
-              // 4. Featured Solar Stores Section (عرض اللوجو + اسم المتجر اسفله لاربع متاجر واسهم للتنقل لـ 10 متاجر وزر عرض كل المتاجر)
+              // 3. Featured Solar Stores Section
               _buildStoresSection(),
 
               const SizedBox(height: 24),
 
-              // 5. Verified Technicians & Installers (فنيين ومهندسين)
+              // 4. Solar Load Calculator Interactive Banner Card
+              _buildCalculatorBannerCard(),
+
+              const SizedBox(height: 24),
+
+              // 5. Verified Technicians & Installers
               _buildSectionTitle(
-                '👨‍🔧 فنيين ومهندسين   ',
-                onSeeAll: () => widget.onNavigateTab?.call(4),
+                'فنيين ومهندسين معتمدين 👨‍🔧',
+                onSeeAll: () => widget.onNavigateTab?.call(3),
               ),
               const SizedBox(height: 12),
               _buildVerifiedInstallersList(),
 
               const SizedBox(height: 24),
 
-              // 6. Solar Load Calculator Interactive Banner ("احسب الآن")
-              _buildCalculatorBannerCard(),
+              // 6. Featured Solar Components & Products (أحدث المنتجات والمنظومات)
+              if (_productsList.isNotEmpty) ...[
+                _buildSectionTitle(
+                  'أحدث الألواح والانفيرترات والبطاريات ⚡',
+                  onSeeAll: () => widget.onNavigateTab?.call(1),
+                ),
+                const SizedBox(height: 12),
+                _buildProductsGrid(),
+                const SizedBox(height: 24),
+              ],
 
-              const SizedBox(height: 24),
-
-              // 7. Featured Solar Components & Products (الألواح والانفيرترات بالدينار)
-              _buildSectionTitle(
-                'أحدث الألواح والانفيرترات والبطاريات',
-                onSeeAll: () => widget.onNavigateTab?.call(3),
-              ),
-              const SizedBox(height: 12),
-              _buildProductsGrid(),
-
-              const SizedBox(height: 100), // Spacing for floating navbar
+              const SizedBox(height: 80), // Spacing for floating navbar
             ],
           ),
         ),
@@ -264,36 +301,56 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryGold,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
+              GestureDetector(
+                onTap: () async {
+                  if (!_isLoggedIn) {
+                    final loginSuccess = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SolarLoginScreen()),
+                    );
+                    if (loginSuccess == true) {
+                      _loadUserData();
+                    }
+                  }
+                },
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryGold,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primaryGold.withOpacity(0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.person_rounded, color: Colors.white, size: 28),
                     ),
-                    child: const Icon(Icons.person_rounded, color: Colors.white, size: 28),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _isLoggedIn && _userName.isNotEmpty
-                            ? 'مرحباً، $_userName '
-                            : '',
-                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _isLoggedIn ? 'مرحباً بك ' : '',
-                        style: const TextStyle(color: Colors.white70, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ],
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _isLoggedIn && _userName.isNotEmpty
+                              ? 'مرحباً، $_userName 👋'
+                              : 'أهلاً بك في منصة الطاقة الشمسية 👋',
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _isLoggedIn ? 'استكشف أحدث المتاجر والعروض والحلول' : 'سجل الدخول للاستفادة الكاملة من الخدمات 🔑',
+                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
               Stack(
                 children: [
@@ -304,25 +361,43 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
                     ),
                     child: IconButton(
                       icon: const Icon(Icons.notifications_none_rounded, color: Colors.white, size: 24),
-                      onPressed: () {
-                        Navigator.push(
+                      onPressed: () async {
+                        await Navigator.push(
                           context,
                           MaterialPageRoute(builder: (context) => const NotificationsScreen()),
                         );
+                        _loadUserData();
                       },
                     ),
                   ),
                   Positioned(
                     top: 8,
                     right: 8,
-                    child: Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryGold,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppTheme.darkNavy, width: 2),
-                      ),
+                    child: ValueListenableBuilder<int>(
+                      valueListenable: WebSocketService.instance.unreadCountNotifier,
+                      builder: (context, count, _) {
+                        if (count <= 0) return const SizedBox.shrink();
+                        return Container(
+                          padding: EdgeInsets.all(count > 9 ? 2 : 0),
+                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryGold,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppTheme.darkNavy, width: 2),
+                          ),
+                          child: Center(
+                            child: Text(
+                              count > 99 ? '99+' : '$count',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -330,50 +405,82 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
             ],
           ),
           const SizedBox(height: 20),
-          GestureDetector(
-            onTap: () {
-              SearchFilterSheet.show(context, onApply: (filters) {
-                AppNotification.showSuccess(
-                  context,
-                  'تم تطبيق الفلترة لـ ${filters['scope']} في ${filters['governorate']}',
-                );
-              });
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(18),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 15,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.search_rounded, color: AppTheme.primaryGold, size: 26),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'ابحث في جميع المتاجر، الألواح، والمحافظات...',
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 15,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () => _executeSearch(_searchController.text),
+                  child: const Icon(Icons.search_rounded, color: AppTheme.primaryGold, size: 24),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (val) {
+                      setState(() {});
+                    },
+                    onSubmitted: (query) {
+                      _executeSearch(query);
+                    },
+                    style: const TextStyle(fontSize: 14, color: AppTheme.darkNavy),
+                    decoration: InputDecoration(
+                      hintText: 'ابحث عن منتج، متجر، أو منظومة...',
+                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear_rounded, size: 18, color: Colors.grey),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {});
+                              },
+                            )
+                          : null,
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.darkNavy,
-                      borderRadius: BorderRadius.circular(12),
+                ),
+                const SizedBox(width: 8),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      SearchFilterSheet.show(context, onApply: (filters) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => SolarCatalogScreen(
+                              initialFilters: filters,
+                              initialTabIndex: filters['scope'] == 'المتاجر المعتمدة' ? 0 : 1,
+                            ),
+                          ),
+                        );
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.darkNavy,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.tune_rounded, color: Colors.white, size: 18),
                     ),
-                    child: const Icon(Icons.tune_rounded, color: Colors.white, size: 18),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],
@@ -381,64 +488,82 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
     );
   }
 
-
-
-  // --- Calculator Banner Card ---
+  // --- Premium Calculator Banner Card ---
   Widget _buildCalculatorBannerCard() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFFFEF3C7), Color(0xFFFDE68A)],
+            colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
             begin: Alignment.topRight,
             end: Alignment.bottomLeft,
           ),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppTheme.primaryGold.withOpacity(0.5)),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppTheme.primaryGold.withOpacity(0.35), width: 1.5),
           boxShadow: [
-            BoxShadow(color: AppTheme.primaryGold.withOpacity(0.15), blurRadius: 12, offset: const Offset(0, 4)),
+            BoxShadow(
+              color: AppTheme.darkNavy.withOpacity(0.3),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
           ],
         ),
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(18),
         child: Row(
           children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryGold.withOpacity(0.18),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.primaryGold, width: 1.5),
+              ),
+              child: const Icon(Icons.calculate_rounded, color: AppTheme.primaryGold, size: 28),
+            ),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.darkNavy,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      'أداة حاسبة المنظومة ☀️',
-                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryGold.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.primaryGold.withOpacity(0.5)),
+                        ),
+                        child: const Text(
+                          'أداة حاسبة الأحمال ☀️',
+                          style: TextStyle(color: AppTheme.primaryGold, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   const Text(
-                    'احسب حاجتك من الألواح والبطاريات والتكلفة بالدينار بضغطة واحدة',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.darkNavy),
+                    'احسب احتياجك من الألواح والبطاريات والتكلفة بالدينار',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.white, height: 1.3),
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             ElevatedButton(
               onPressed: () {
                 widget.onNavigateTab?.call(2);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.darkNavy,
-                foregroundColor: Colors.white,
+                backgroundColor: AppTheme.primaryGold,
+                foregroundColor: AppTheme.darkNavy,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                elevation: 4,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                elevation: 3,
               ),
-              child: const Text('احسب الآن', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              child: const Text('احسب الآن ✨', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
             ),
           ],
         ),
@@ -446,97 +571,63 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
     );
   }
 
-  // --- Featured Stores Section (Logo + Store Name, Arrow Navigation for 10 Stores, Header & End-of-List View All) ---
+  // --- Featured Stores Section ---
   Widget _buildStoresSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header Row: Section Title + View All Link + Scroll Arrows for 10 Stores
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-           
-                  SizedBox(height: 2),
-       
-                ],
-              ),
-              Row(
-                children: [
-                  TextButton(
-                    onPressed: () => widget.onNavigateTab?.call(3),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'عرض الكل',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.primaryGold),
-                        ),
-                        SizedBox(width: 2),
-                        Icon(Icons.arrow_back_ios_new_rounded, size: 12, color: AppTheme.primaryGold),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+        _buildSectionTitle(
+          'المتاجر والشركات المعتمدة 🏪',
+          onSeeAll: () => widget.onNavigateTab?.call(1),
         ),
         const SizedBox(height: 14),
 
-        // Horizontal Stores Carousel: Store Logo Avatar + Store Name Underneath + View All at End
         SizedBox(
-          height: 135,
+          height: 120,
           child: ListView.builder(
             controller: _storesScrollController,
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             physics: const BouncingScrollPhysics(),
-            itemCount: _storesList.length + 1, // 10 Stores + 1 End View All Card
+            itemCount: _storesList.length + 1,
             itemBuilder: (context, index) {
               if (index == _storesList.length) {
-                // 11th Card at End of List: "عرض كل المتاجر"
                 return GestureDetector(
                   onTap: () {
-                    widget.onNavigateTab?.call(3);
+                    widget.onNavigateTab?.call(1);
                   },
                   child: Container(
-                    width: 86,
+                    width: 90,
                     margin: const EdgeInsets.symmetric(horizontal: 6),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.grey.shade200),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 3)),
+                      ],
+                    ),
                     child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Container(
-                          width: 72,
-                          height: 72,
-                          decoration: BoxDecoration(
+                          width: 46,
+                          height: 46,
+                          decoration: const BoxDecoration(
                             color: AppTheme.darkNavy,
                             shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(color: AppTheme.darkNavy.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4)),
-                            ],
                           ),
-                          child: const Center(
-                            child: Icon(Icons.arrow_back_rounded, color: AppTheme.primaryGold, size: 30),
-                          ),
+                          child: const Icon(Icons.arrow_back_rounded, color: AppTheme.primaryGold, size: 22),
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'عرض كل المتاجر ➔',
+                          'كل المتاجر ➔',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 11,
                             color: AppTheme.darkNavy,
-                            height: 1.2,
                           ),
                         ),
                       ],
@@ -559,56 +650,59 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
                   );
                 },
                 child: Container(
-                  width: 86,
+                  width: 96,
                   margin: const EdgeInsets.symmetric(horizontal: 6),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.grey.shade200),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 3)),
+                    ],
+                  ),
                   child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Store Logo Icon Box
                       Stack(
                         children: [
                           Container(
-                            width: 72,
-                            height: 72,
-                            padding: const EdgeInsets.all(12),
+                            width: 50,
+                            height: 50,
                             decoration: BoxDecoration(
                               color: color.withOpacity(0.12),
                               shape: BoxShape.circle,
-                              border: Border.all(color: color, width: 2),
-                              boxShadow: [
-                                BoxShadow(color: color.withOpacity(0.15), blurRadius: 10, offset: const Offset(0, 4)),
-                              ],
+                              border: Border.all(color: color, width: 1.5),
                             ),
                             child: Center(
-                              child: Icon(icon, color: color, size: 34),
+                              child: Icon(icon, color: color, size: 26),
                             ),
                           ),
                           if (store['verified'] == true)
                             Positioned(
-                              top: 2,
-                              right: 2,
+                              top: 0,
+                              right: 0,
                               child: Container(
-                                padding: const EdgeInsets.all(2),
+                                padding: const EdgeInsets.all(1),
                                 decoration: const BoxDecoration(
                                   color: Colors.white,
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(Icons.verified_rounded, color: AppTheme.primaryGold, size: 18),
+                                child: const Icon(Icons.verified_rounded, color: AppTheme.primaryGold, size: 16),
                               ),
                             ),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      // Store Name Underneath
                       Text(
                         store['name'] as String,
                         textAlign: TextAlign.center,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 11,
                           color: AppTheme.darkNavy,
-                          height: 1.2,
                         ),
                       ),
                     ],
@@ -630,10 +724,10 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
         crossAxisCount: 2,
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        childAspectRatio: 0.74,
+        childAspectRatio: 0.76,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
-        children: _productsList.map((p) {
+        children: _productsList.take(4).map((p) {
           return _buildProductTile(p);
         }).toList(),
       ),
@@ -656,7 +750,8 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.grey.shade200),
           boxShadow: [
             BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4)),
           ],
@@ -713,12 +808,12 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
               children: [
                 Text(
                   product['price'] as String,
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryGold, fontSize: 12),
+                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryGold, fontSize: 11),
                 ),
                 Container(
-                  padding: const EdgeInsets.all(6),
+                  padding: const EdgeInsets.all(5),
                   decoration: const BoxDecoration(color: AppTheme.darkNavy, shape: BoxShape.circle),
-                  child: const Icon(Icons.add_shopping_cart_rounded, color: Colors.white, size: 14),
+                  child: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 10),
                 ),
               ],
             ),
@@ -748,6 +843,7 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
         scrollDirection: Axis.horizontal,
         itemCount: _installersList.length,
         padding: const EdgeInsets.symmetric(horizontal: 12),
+        physics: const BouncingScrollPhysics(),
         itemBuilder: (context, index) {
           final inst = _installersList[index];
           return GestureDetector(
@@ -758,7 +854,7 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
               );
             },
             child: Container(
-              width: 225,
+              width: 220,
               margin: const EdgeInsets.symmetric(horizontal: 4),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -771,9 +867,14 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
               ),
               child: Row(
                 children: [
-                  const CircleAvatar(
-                    backgroundColor: AppTheme.darkNavy,
-                    child: Icon(Icons.engineering_rounded, color: AppTheme.primaryGold),
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppTheme.darkNavy,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(Icons.engineering_rounded, color: AppTheme.primaryGold, size: 24),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -782,7 +883,17 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(inst['name'] as String, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppTheme.darkNavy), maxLines: 1),
-                        Text(inst['location'] as String, style: TextStyle(fontSize: 10, color: Colors.grey.shade500), maxLines: 1),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(Icons.location_on_outlined, size: 11, color: Colors.grey.shade500),
+                            const SizedBox(width: 2),
+                            Expanded(
+                              child: Text(inst['location'] as String, style: TextStyle(fontSize: 10, color: Colors.grey.shade600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
                         Text(inst['installs'] as String, style: const TextStyle(fontSize: 10, color: AppTheme.primaryGold, fontWeight: FontWeight.bold), maxLines: 1),
                       ],
                     ),
@@ -796,17 +907,44 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
     );
   }
 
+  // --- Uniform Section Title Widget ---
   Widget _buildSectionTitle(String title, {VoidCallback? onSeeAll}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 18),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.darkNavy)),
-          GestureDetector(
-            onTap: onSeeAll,
-            child: const Text('عرض الكل', style: TextStyle(color: AppTheme.primaryGold, fontWeight: FontWeight.bold, fontSize: 12)),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.darkNavy,
+            ),
           ),
+          if (onSeeAll != null)
+            GestureDetector(
+              onTap: onSeeAll,
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'عرض الكل',
+                    style: TextStyle(
+                      color: AppTheme.primaryGold,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                  SizedBox(width: 2),
+                  Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    size: 11,
+                    color: AppTheme.primaryGold,
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

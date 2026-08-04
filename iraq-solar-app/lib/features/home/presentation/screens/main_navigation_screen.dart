@@ -1,12 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/services/websocket_service.dart';
 import 'home_screen.dart';
 import '../../../calculator/presentation/screens/calculator_screen.dart';
 import '../../../products/presentation/screens/catalog_screen.dart';
 import '../../../installers/presentation/screens/installers_screen.dart';
-import '../../../profile/presentation/screens/profile_screen.dart';
-
-import '../../../products/presentation/screens/promotions_catalog_screen.dart';
+import '../../../profile/presentation/screens/settings_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   final int initialIndex;
@@ -18,11 +19,93 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   late int _currentIndex;
+  StreamSubscription<WSMessage>? _wsSub;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+
+    // Listen for incoming notifications & order status changes and show SnackBar
+    _wsSub = WebSocketService.instance.messageStream.listen((msg) {
+      if ((msg.event == 'notification.created' || msg.event == 'order.status_changed') && mounted) {
+        String title = 'إشعار جديد 🔔';
+        String body = '';
+
+        if (msg.isNotification || msg.event == 'notification.created') {
+          title = msg.payload['title']?.toString() ?? 'إشعار جديد';
+          body = msg.payload['body']?.toString() ?? '';
+        } else {
+          title = 'تحديث حالة الطلب 📦';
+          final toStatus = msg.payload['to_status']?.toString() ?? '';
+          final notes = msg.payload['notes']?.toString() ?? '';
+          body = 'تم تغيير حالة طلبك${toStatus.isNotEmpty ? ' إلى $toStatus' : ''}${notes.isNotEmpty ? ' - $notes' : ''}';
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryGold.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.notifications_active_rounded,
+                      color: AppTheme.primaryGold, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title.toString(),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Colors.white,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (body.toString().isNotEmpty)
+                        Text(
+                          body.toString(),
+                          style: const TextStyle(fontSize: 11, color: Colors.white70),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.darkNavy,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            margin: const EdgeInsets.only(bottom: 80, left: 16, right: 16),
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'عرض',
+              textColor: AppTheme.primaryGold,
+              onPressed: () {
+                // Navigate to notifications tab or screen
+                setState(() => _currentIndex = 0);
+              },
+            ),
+          ),
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _wsSub?.cancel();
+    super.dispose();
   }
 
   void _onTabSelect(int index) {
@@ -37,11 +120,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       SuperQiHomeScreen(
         onNavigateTab: _onTabSelect,
       ),
-      const PromotionsCatalogScreen(),
-      const SolarCalculatorScreen(),
       const SolarCatalogScreen(),
+      const SolarCalculatorScreen(),
       const SolarInstallersScreen(),
-      const SolarProfileScreen(),
+      const SolarSettingsScreen(),
     ];
 
     return Directionality(
@@ -54,16 +136,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               children: screens,
             ),
 
-            // Super Qi Style Persistent Floating Navigation Bar
+            // Super Qi Style Persistent Floating Navigation Bar (5 Items)
             Positioned(
-              left: 12,
-              right: 12,
+              left: 14,
+              right: 14,
               bottom: 16,
               child: Container(
-                height: 65,
+                height: 62,
                 decoration: BoxDecoration(
                   color: AppTheme.darkNavy,
-                  borderRadius: BorderRadius.circular(35),
+                  borderRadius: BorderRadius.circular(32),
                   boxShadow: [
                     BoxShadow(
                       color: AppTheme.darkNavy.withOpacity(0.35),
@@ -72,21 +154,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     ),
                   ],
                 ),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildNavItem(0, Icons.home_rounded, 'الرئيسية'),
-                      _buildNavItem(1, Icons.local_offer_outlined, 'العروض'),
-                      _buildNavItem(2, Icons.calculate_outlined, 'الحاسبة'),
-                      _buildNavItem(3, Icons.storefront_outlined, 'المتاجر'),
-                      _buildNavItem(4, Icons.engineering_outlined, 'الفنيين'),
-                      _buildNavItem(5, Icons.person_outline_rounded, 'الحساب'),
-                    ],
-                  ),
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildNavItem(0, Icons.home_rounded, 'الرئيسية'),
+                    _buildNavItem(1, Icons.storefront_rounded, 'المتاجر'),
+                    _buildNavItem(2, Icons.calculate_rounded, 'الحاسبة'),
+                    _buildNavItem(3, Icons.engineering_rounded, 'الفنيين'),
+                    _buildNavItem(4, Icons.settings_rounded, 'الإعدادات'),
+                  ],
                 ),
               ),
             ),

@@ -193,6 +193,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           'role': 'customer',
         });
       }
+      await ApiClient.fetchAndSaveUserProfile();
       if (!mounted) return;
       AppNotification.showSuccess(context, res['message'] ?? 'تم إنشاء الحساب وحفظ الموقع بنجاح 🎉');
       Navigator.of(context).pop(true);

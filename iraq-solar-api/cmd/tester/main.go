@@ -37,7 +37,7 @@ func setupTestRouter() (*gin.Engine, *service.AuthService) {
 	productRepo := repository.NewProductRepository(nil)
 	calcRepo := repository.NewSolarCalculationRepository(nil)
 
-	authService := service.NewAuthService(cfg.JWTSecret, userRepo)
+	authService := service.NewAuthService(cfg.JWTSecret, userRepo, nil)
 	calcService := service.NewSolarCalculatorService(calcRepo)
 
 	authHandler := handler.NewAuthHandler(authService)

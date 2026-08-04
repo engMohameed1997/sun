@@ -5,6 +5,8 @@ class CartItem {
   final String title;
   final String storeName;
   final String storeId;
+  final String? branchId;
+  final String? branchName;
   final int priceIQD;
   int qty;
 
@@ -13,6 +15,8 @@ class CartItem {
     required this.title,
     required this.storeName,
     required this.storeId,
+    this.branchId,
+    this.branchName,
     required this.priceIQD,
     this.qty = 1,
   });
@@ -50,6 +54,8 @@ class CartService {
     required String title,
     required String storeName,
     required String storeId,
+    String? branchId,
+    String? branchName,
     required int priceIQD,
     int qty = 1,
   }) {
@@ -63,6 +69,8 @@ class CartService {
           title: title,
           storeName: storeName,
           storeId: storeId,
+          branchId: branchId,
+          branchName: branchName,
           priceIQD: priceIQD,
           qty: qty,
         ),

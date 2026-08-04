@@ -40,15 +40,18 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 	}
 
 	utils.SuccessResponse(c, http.StatusOK, "تم جلب الملف الشخصي بنجاح", gin.H{
-		"id":          user.ID,
-		"full_name":   user.FullName,
-		"phone":       user.Phone,
-		"role":        user.Role,
-		"governorate": user.Governorate,
-		"city":        user.City,
-		"is_active":   user.IsActive,
-		"is_verified": user.IsVerified,
-		"created_at":  user.CreatedAt,
+		"id":            user.ID,
+		"full_name":     user.FullName,
+		"phone":         user.Phone,
+		"role":          user.Role,
+		"governorate":   user.Governorate,
+		"city":          user.City,
+		"governorate_id": user.GovernorateID,
+		"district_id":   user.DistrictID,
+		"landmark":      user.Landmark,
+		"is_active":     user.IsActive,
+		"is_verified":   user.IsVerified,
+		"created_at":    user.CreatedAt,
 	})
 }
 

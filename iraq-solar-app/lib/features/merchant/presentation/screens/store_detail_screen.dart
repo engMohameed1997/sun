@@ -77,6 +77,8 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
               'brand': m['brand_name'] ?? 'ماركة معتمدة',
               'model': m['model'] ?? '',
               'store': storeName,
+              'store_id': widget.storeData['id']?.toString() ?? m['store_id']?.toString() ?? '',
+              'branch_id': m['branch_id']?.toString() ?? '',
               'store_description': widget.storeData['description'] ?? '',
               'is_verified': widget.storeData['is_verified'] ?? widget.storeData['verified'] ?? false,
               'category': catName,
@@ -696,7 +698,8 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
                         id: item['id'] as String,
                         title: item['name'] as String,
                         storeName: storeName,
-                        storeId: widget.storeData['id']?.toString() ?? '',
+                        storeId: widget.storeData['id']?.toString() ?? item['store_id']?.toString() ?? '',
+                        branchId: item['branch_id']?.toString(),
                         priceIQD: priceValue,
                         qty: 1,
                       );

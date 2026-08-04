@@ -3,13 +3,13 @@ import {
   ShoppingCart, Search, Eye, CheckCircle2, Clock, XCircle,
   Truck, PackageCheck, Store, MapPin, Wifi, WifiOff, RotateCcw,
   Package, CreditCard, User, Phone, ChevronLeft, ChevronRight,
-  Bell, Filter,
+  Bell, Filter, Building2, ShieldCheck,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useOrdersWebSocket } from '../hooks/useOrdersWebSocket';
 import { OrderStatusTimeline } from '../components/orders/OrderStatusTimeline';
-import type { OrderFull, OrderStatus, OrderStatusChangedPayload, AdminOrdersResponse, OrderFilters } from '../types';
+import type { OrderFull, OrderStatus, OrderStatusChangedPayload, AdminOrdersResponse, OrderFilters, Store as StoreType } from '../types';
 
 // ─── Status configuration ───────────────────────────────────────────────────
 
@@ -95,6 +95,7 @@ export const OrdersPage: React.FC = () => {
 
   // Data state
   const [orders, setOrders] = useState<OrderFull[]>([]);
+  const [stores, setStores] = useState<StoreType[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -103,6 +104,13 @@ export const OrdersPage: React.FC = () => {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [statusNotes, setStatusNotes] = useState('');
   const [toasts, setToasts] = useState<Toast[]>([]);
+
+  // Fetch stores list for filters
+  useEffect(() => {
+    api.get<{ data: { stores: StoreType[] } }>('/admin/stores')
+      .then(res => setStores(res.data?.data?.stores || []))
+      .catch(() => setStores([]));
+  }, []);
 
   // Filters
   const [filters, setFilters] = useState<OrderFilters>({ page: 1, limit: 20, status: '', search: '' });
@@ -288,7 +296,7 @@ export const OrdersPage: React.FC = () => {
 
         {/* Extended Filters */}
         {showFilters && (
-          <div className="mt-4 pt-4 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="mt-4 pt-4 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <div className="relative">
               <input
                 ref={searchRef}
@@ -305,6 +313,42 @@ export const OrdersPage: React.FC = () => {
               />
               <Search size={14} className="absolute left-3 top-2.5 text-slate-500" />
             </div>
+
+            {/* Store Filter */}
+            <select
+              value={filters.store_id || ''}
+              onChange={e => {
+                const sId = e.target.value;
+                setFilters(f => ({ ...f, store_id: sId, branch_id: '', page: 1 }));
+                fetchOrders({ ...filters, store_id: sId, branch_id: '', page: 1 });
+              }}
+              className="bg-slate-950/60 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 transition"
+            >
+              <option value="">جميع المتاجر</option>
+              {stores.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+
+            {/* Branch Filter */}
+            <select
+              value={filters.branch_id || ''}
+              disabled={!filters.store_id}
+              onChange={e => {
+                const bId = e.target.value;
+                setFilters(f => ({ ...f, branch_id: bId, page: 1 }));
+                fetchOrders({ ...filters, branch_id: bId, page: 1 });
+              }}
+              className="bg-slate-950/60 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 transition disabled:opacity-40"
+            >
+              <option value="">جميع الفروع</option>
+              {stores
+                .find(s => s.id === filters.store_id)
+                ?.branches?.map(b => (
+                  <option key={b.id} value={b.id}>{b.name} ({b.city || 'الفرع'})</option>
+                ))}
+            </select>
+
             <input
               type="date"
               onChange={e => setFilters(f => ({ ...f, from_date: e.target.value, page: 1 }))}
@@ -403,20 +447,26 @@ export const OrdersPage: React.FC = () => {
                       {/* Store / Branch */}
                       <td className="p-4">
                         {order.store_name ? (
-                          <div>
-                            <div className="flex items-center gap-1 text-slate-200 font-medium">
-                              <Store size={11} className="text-slate-400 flex-shrink-0" />
-                              <span className="truncate max-w-[100px]">{order.store_name}</span>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 text-slate-200 font-semibold text-xs">
+                              {order.store_logo_url ? (
+                                <img src={order.store_logo_url} alt="" className="w-4 h-4 rounded object-cover flex-shrink-0" />
+                              ) : (
+                                <Store size={12} className="text-blue-400 flex-shrink-0" />
+                              )}
+                              <span className="truncate max-w-[120px]">{order.store_name}</span>
                             </div>
-                            {order.branch_name && (
-                              <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-0.5">
+                            {order.branch_name ? (
+                              <div className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
                                 <MapPin size={9} className="flex-shrink-0" />
-                                {order.branch_name}
+                                <span className="truncate max-w-[110px]">{order.branch_name}</span>
                               </div>
+                            ) : (
+                              <div className="text-[10px] text-slate-500 font-mono">الفرع الرئيسي</div>
                             )}
                           </div>
                         ) : (
-                          <span className="text-slate-600">—</span>
+                          <span className="text-xs text-slate-600">—</span>
                         )}
                       </td>
 
@@ -538,31 +588,63 @@ export const OrdersPage: React.FC = () => {
 
                     {/* Store/Branch Card */}
                     {selectedOrder.store_name ? (
-                      <div className="bg-slate-800/50 border border-slate-700/60 rounded-xl p-4 space-y-3">
-                        <div className="flex items-center gap-2 text-xs font-bold text-slate-300 border-b border-slate-700/60 pb-2">
-                          <Store size={14} className="text-blue-400" /> المتجر والفرع
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {selectedOrder.store_logo_url && (
-                            <img src={selectedOrder.store_logo_url} alt="" className="w-8 h-8 rounded-lg object-cover bg-slate-700" />
+                      <div className="bg-slate-800/50 border border-slate-700/60 rounded-xl p-4 space-y-3.5 relative overflow-hidden">
+                        <div className="flex items-center justify-between border-b border-slate-700/60 pb-2">
+                          <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
+                            <Store size={14} className="text-blue-400" /> المتجر والفرع
+                          </div>
+                          {selectedOrder.store_slug && (
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20">
+                              {selectedOrder.store_slug}
+                            </span>
                           )}
-                          <div>
-                            <div className="text-sm font-bold text-slate-100">{selectedOrder.store_name}</div>
-                            {selectedOrder.store_phone && <div className="text-[11px] text-slate-400 font-mono">{selectedOrder.store_phone}</div>}
+                        </div>
+
+                        {/* Store Main Info */}
+                        <div className="flex items-center gap-3 bg-slate-900/50 p-2.5 rounded-lg border border-slate-700/40">
+                          {selectedOrder.store_logo_url ? (
+                            <img src={selectedOrder.store_logo_url} alt="" className="w-9 h-9 rounded-lg object-cover bg-slate-800 border border-slate-700 flex-shrink-0" />
+                          ) : (
+                            <div className="w-9 h-9 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center flex-shrink-0 font-bold text-xs">
+                              <Store size={18} />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm font-bold text-slate-100 truncate">{selectedOrder.store_name}</span>
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 text-[9px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded">
+                                <ShieldCheck size={10} /> معتمد
+                              </span>
+                            </div>
+                            {selectedOrder.store_phone && (
+                              <div className="text-[11px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
+                                <Phone size={10} className="text-slate-500" /> {selectedOrder.store_phone}
+                              </div>
+                            )}
                           </div>
                         </div>
-                        {selectedOrder.branch_name && (
-                          <>
-                            <InfoRow icon={MapPin} label="الفرع" value={selectedOrder.branch_name} />
-                            {selectedOrder.branch_city && <InfoRow icon={MapPin} label="المدينة" value={`${selectedOrder.branch_city} / ${selectedOrder.branch_governorate_ar || ''}`} />}
-                            {selectedOrder.branch_address && <InfoRow icon={MapPin} label="العنوان" value={selectedOrder.branch_address} />}
-                            {selectedOrder.branch_phone && <InfoRow icon={Phone} label="الهاتف" value={selectedOrder.branch_phone} mono />}
-                          </>
-                        )}
+
+                        {/* Branch Info */}
+                        <div className="bg-slate-900/30 rounded-lg p-2.5 border border-slate-800 space-y-1.5">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+                            <Building2 size={13} className="text-amber-400 flex-shrink-0" />
+                            <span>الفرع: {selectedOrder.branch_name || 'الفرع الرئيسي'}</span>
+                          </div>
+                          {(selectedOrder.branch_city || selectedOrder.branch_governorate_ar) && (
+                            <InfoRow icon={MapPin} label="المحافظة/المدينة" value={`${selectedOrder.branch_governorate_ar || ''}${selectedOrder.branch_governorate_ar && selectedOrder.branch_city ? ' / ' : ''}${selectedOrder.branch_city || ''}`} />
+                          )}
+                          {selectedOrder.branch_address && (
+                            <InfoRow icon={MapPin} label="العنوان التفصيلي" value={selectedOrder.branch_address} />
+                          )}
+                          {selectedOrder.branch_phone && (
+                            <InfoRow icon={Phone} label="هاتف الفرع" value={selectedOrder.branch_phone} mono />
+                          )}
+                        </div>
                       </div>
                     ) : (
-                      <div className="bg-slate-800/30 border border-slate-700/40 rounded-xl p-4 flex items-center justify-center text-slate-600 text-xs">
-                        لا يوجد متجر مرتبط بهذا الطلب
+                      <div className="bg-slate-800/30 border border-slate-700/40 rounded-xl p-4 flex flex-col items-center justify-center text-slate-500 text-xs text-center gap-2">
+                        <Store size={22} className="text-slate-600" />
+                        <span>لا يوجد متجر فرعي مرتبط بهذا الطلب (طلب مباشر)</span>
                       </div>
                     )}
                   </div>

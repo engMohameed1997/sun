@@ -38,6 +38,23 @@ func (h *CalculatorHandler) EstimateSystem(c *gin.Context) {
 	utils.SuccessResponse(c, http.StatusOK, "تم حساب تقدير المنظومة الشمسية الموصى بها بنجاح", recommendation)
 }
 
+func (h *CalculatorHandler) ListUserCalculations(c *gin.Context) {
+	val, exists := c.Get("user_id")
+	if !exists {
+		utils.UnauthorizedError(c, "غير مصرح")
+		return
+	}
+	userID := val.(uuid.UUID)
+
+	calcs, err := h.calcService.GetUserCalculations(c.Request.Context(), userID)
+	if err != nil {
+		utils.InternalServerError(c, err)
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "تم جلب الحسابات المحفوظة بنجاح", calcs)
+}
+
 func (h *CalculatorHandler) CalculateROI(c *gin.Context) {
 	var req domain.ROICalculationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
