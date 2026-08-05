@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../network/api_client.dart';
 import '../theme/app_theme.dart';
 
 class ProductImageWidget extends StatelessWidget {
@@ -21,37 +22,41 @@ class ProductImageWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (imagePath != null && imagePath!.isNotEmpty) {
-      return Image.asset(
-        imagePath!,
-        width: width,
-        height: height,
-        fit: fit,
-        errorBuilder: (context, error, stackTrace) => _buildFallbackIcon(),
-      );
-    }
-
-    if (imageUrl != null && imageUrl!.isNotEmpty) {
-      return Image.network(
-        imageUrl!,
-        width: width,
-        height: height,
-        fit: fit,
-        errorBuilder: (context, error, stackTrace) => _buildFallbackIcon(),
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return Container(
-            color: Colors.grey.shade100,
-            child: const Center(
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryGold),
-              ),
-            ),
+    final candidate = imageUrl ?? imagePath;
+    if (candidate != null && candidate.isNotEmpty) {
+      if (candidate.startsWith('http://') || candidate.startsWith('https://') || candidate.startsWith('/')) {
+        final resolved = ApiClient.resolveImageUrl(candidate);
+        if (resolved != null && resolved.isNotEmpty) {
+          return Image.network(
+            resolved,
+            width: width,
+            height: height,
+            fit: fit,
+            errorBuilder: (context, error, stackTrace) => _buildFallbackIcon(),
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(
+                color: Colors.grey.shade100,
+                child: const Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryGold),
+                  ),
+                ),
+              );
+            },
           );
-        },
-      );
+        }
+      } else if (candidate.startsWith('assets/')) {
+        return Image.asset(
+          candidate,
+          width: width,
+          height: height,
+          fit: fit,
+          errorBuilder: (context, error, stackTrace) => _buildFallbackIcon(),
+        );
+      }
     }
 
     return _buildFallbackIcon();

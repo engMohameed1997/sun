@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Store, ShieldCheck, Truck, CheckCircle2, XCircle, Plus, MapPin } from 'lucide-react';
+import { Store, ShieldCheck, Truck, CheckCircle2, XCircle, Plus, MapPin, Edit2, Upload, Image as ImageIcon } from 'lucide-react';
 import { api } from '../services/api';
 import type { Store as StoreType, DeliveryFee, User, Governorate } from '../types';
 
@@ -10,6 +10,7 @@ export const StoresPage: React.FC = () => {
   const [selectedStoreFees, setSelectedStoreFees] = useState<{ store: StoreType; fees: DeliveryFee[] } | null>(null);
   const [updatingFee, setUpdatingFee] = useState(false);
 
+  // Add store state
   const [isAddStoreModalOpen, setIsAddStoreModalOpen] = useState(false);
   const [newStore, setNewStore] = useState({
     merchant_id: '',
@@ -25,6 +26,22 @@ export const StoresPage: React.FC = () => {
     address: ''
   });
   const [creatingStore, setCreatingStore] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+
+  // Edit store state
+  const [editingStore, setEditingStore] = useState<StoreType | null>(null);
+  const [editStoreData, setEditStoreData] = useState({
+    name: '',
+    slug: '',
+    phone: '',
+    description: '',
+    logo_url: '',
+    cover_url: ''
+  });
+  const [updatingStore, setUpdatingStore] = useState(false);
+  const [uploadingEditLogo, setUploadingEditLogo] = useState(false);
+  const [uploadingEditCover, setUploadingEditCover] = useState(false);
 
   const fetchStores = async () => {
     try {
@@ -66,6 +83,55 @@ export const StoresPage: React.FC = () => {
     fetchMerchants();
     fetchGovernorates();
   }, []);
+
+  const handleImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: 'logo' | 'cover',
+    isEditMode: boolean = false
+  ) => {
+    if (!e.target.files?.[0]) return;
+    const file = e.target.files[0];
+    const formData = new FormData();
+    formData.append('image', file);
+
+    if (type === 'logo') {
+      if (isEditMode) setUploadingEditLogo(true);
+      else setUploadingLogo(true);
+    } else {
+      if (isEditMode) setUploadingEditCover(true);
+      else setUploadingCover(true);
+    }
+
+    try {
+      const res = await api.post('/upload/image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const url = res.data?.data?.url || res.data?.url;
+      if (url) {
+        if (isEditMode) {
+          setEditStoreData((prev) => ({
+            ...prev,
+            [type === 'logo' ? 'logo_url' : 'cover_url']: url,
+          }));
+        } else {
+          setNewStore((prev) => ({
+            ...prev,
+            [type === 'logo' ? 'logo_url' : 'cover_url']: url,
+          }));
+        }
+      } else {
+        alert('لم يتم استرجاع رابط الصورة المرفوعة');
+      }
+    } catch (err: any) {
+      console.error('Failed upload store image:', err);
+      alert('فشل رفع الصورة: ' + (err.response?.data?.error || err.response?.data?.message || err.message));
+    } finally {
+      setUploadingLogo(false);
+      setUploadingCover(false);
+      setUploadingEditLogo(false);
+      setUploadingEditCover(false);
+    }
+  };
 
   const handleToggleVerification = async (storeId: string, currentStatus: boolean) => {
     try {
@@ -132,7 +198,6 @@ export const StoresPage: React.FC = () => {
 
     setCreatingStore(true);
     try {
-      // 1. Create the store
       const storeRes = await api.post('/admin/stores', {
         merchant_id: newStore.merchant_id,
         name: newStore.name,
@@ -145,14 +210,13 @@ export const StoresPage: React.FC = () => {
 
       const createdStore = storeRes.data.data;
 
-      // 2. Automatically create the first (main) branch if governorate is selected
       if (newStore.governorate_id) {
         await api.post(`/admin/stores/${createdStore.id}/branches`, {
           name: 'الفرع الرئيسي',
           governorate_id: Number(newStore.governorate_id),
           city: newStore.city,
           address: newStore.address,
-          phone: newStore.phone // copy store phone to branch if provided
+          phone: newStore.phone
         });
       }
 
@@ -167,6 +231,43 @@ export const StoresPage: React.FC = () => {
     }
   };
 
+  const openEditModal = (store: StoreType) => {
+    setEditingStore(store);
+    setEditStoreData({
+      name: store.name || '',
+      slug: store.slug || '',
+      phone: store.phone || '',
+      description: store.description || '',
+      logo_url: store.logo_url || '',
+      cover_url: store.cover_url || '',
+    });
+  };
+
+  const handleUpdateStore = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStore) return;
+
+    setUpdatingStore(true);
+    try {
+      await api.put(`/admin/stores/${editingStore.id}`, {
+        name: editStoreData.name,
+        slug: editStoreData.slug || undefined,
+        phone: editStoreData.phone || undefined,
+        description: editStoreData.description || undefined,
+        logo_url: editStoreData.logo_url || undefined,
+        cover_url: editStoreData.cover_url || undefined,
+      });
+
+      alert('تم تحديث بيانات المتجر بنجاح');
+      setEditingStore(null);
+      fetchStores();
+    } catch (err: any) {
+      alert(err.response?.data?.message || err.response?.data?.error || 'فشل تحديث بيانات المتجر');
+    } finally {
+      setUpdatingStore(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-5 rounded-2xl">
@@ -175,7 +276,7 @@ export const StoresPage: React.FC = () => {
             <Store className="text-amber-400" size={22} />
             إدارة المتاجر والفروع
           </h1>
-          <p className="text-slate-400 text-xs mt-1">منح شارة التوثيق للتجار، ضبط أسعار التوصيل وإضافة متاجر جديدة</p>
+          <p className="text-slate-400 text-xs mt-1">تعديل بيانات المتجر، إدراج الشعار، توثيق التجار، وضبط أسعار التوصيل</p>
         </div>
         <button
           onClick={() => setIsAddStoreModalOpen(true)}
@@ -192,7 +293,7 @@ export const StoresPage: React.FC = () => {
             <div>
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold overflow-hidden">
+                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold overflow-hidden shrink-0">
                     {s.logo_url ? <img src={s.logo_url} alt={s.name} className="w-full h-full object-cover rounded-xl" /> : <Store size={24} />}
                   </div>
                   <div>
@@ -221,20 +322,33 @@ export const StoresPage: React.FC = () => {
                   <span className="text-slate-500 block text-[10px]">الهاتف</span>
                   <span className="text-slate-300 font-mono">{s.phone || '-'}</span>
                 </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px]">الرابط المستعار (Slug)</span>
+                  <span className="text-amber-400 font-mono text-[11px]">{s.slug || '-'}</span>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-2 border-t border-slate-800/60 mt-4">
-              <button
-                onClick={() => handleToggleVerification(s.id, !!s.is_verified)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${s.is_verified
-                  ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20'
-                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
-                  }`}
-              >
-                {s.is_verified ? <XCircle size={14} /> : <CheckCircle2 size={14} />}
-                {s.is_verified ? 'إلغاء التوثيق' : 'منح التوثيق ✔'}
-              </button>
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800/60 mt-4 gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => openEditModal(s)}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Edit2 size={14} /> تعديل المتجر
+                </button>
+
+                <button
+                  onClick={() => handleToggleVerification(s.id, !!s.is_verified)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${s.is_verified
+                    ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30 hover:bg-rose-500/20'
+                    : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
+                    }`}
+                >
+                  {s.is_verified ? <XCircle size={14} /> : <CheckCircle2 size={14} />}
+                  {s.is_verified ? 'إلغاء التوثيق' : 'منح التوثيق ✔'}
+                </button>
+              </div>
 
               <button
                 onClick={() => openDeliveryFeesModal(s)}
@@ -254,6 +368,7 @@ export const StoresPage: React.FC = () => {
         )}
       </div>
 
+      {/* Add Store Modal */}
       {isAddStoreModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
@@ -299,8 +414,7 @@ export const StoresPage: React.FC = () => {
                     type="text"
                     value={newStore.slug}
                     onChange={(e) => {
-                      // Allow only english letters, numbers, and hyphens. Replace spaces with hyphens.
-                      const val = e.target.value.toLowerCase().replace(/\\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+                      const val = e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
                       setNewStore({ ...newStore, slug: val });
                     }}
                     placeholder="مثال: al-alamiya-store"
@@ -310,26 +424,43 @@ export const StoresPage: React.FC = () => {
                   <p className="text-[10px] text-slate-500 mt-1">يُستخدم في الرابط: /store/al-alamiya-store. إذا تُرك فارغاً سيتم إنشاؤه تلقائياً.</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-slate-400 text-xs mb-1">رابط الشعار (Logo URL - اختياري)</label>
-                    <input
-                      type="url"
-                      value={newStore.logo_url}
-                      onChange={(e) => setNewStore({ ...newStore, logo_url: e.target.value })}
-                      placeholder="https://..."
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-slate-200 outline-none focus:border-amber-500/50"
-                    />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Logo Upload */}
+                  <div className="space-y-2">
+                    <label className="block text-slate-400 text-xs">شعار المتجر (Logo)</label>
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 overflow-hidden shrink-0">
+                        {newStore.logo_url ? <img src={newStore.logo_url} alt="Logo" className="w-full h-full object-cover" /> : <ImageIcon size={20} />}
+                      </div>
+                      <div className="flex-1">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleImageUpload(e, 'logo', false)}
+                          className="text-xs text-slate-400"
+                        />
+                        {uploadingLogo && <p className="text-amber-400 text-[10px] mt-1">جارٍ رفع الشعار إلى MinIO...</p>}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-slate-400 text-xs mb-1">رابط الغلاف (Cover URL - اختياري)</label>
-                    <input
-                      type="url"
-                      value={newStore.cover_url}
-                      onChange={(e) => setNewStore({ ...newStore, cover_url: e.target.value })}
-                      placeholder="https://..."
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-slate-200 outline-none focus:border-amber-500/50"
-                    />
+
+                  {/* Cover Upload */}
+                  <div className="space-y-2">
+                    <label className="block text-slate-400 text-xs">صورة الغلاف (Cover)</label>
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-500 overflow-hidden shrink-0">
+                        {newStore.cover_url ? <img src={newStore.cover_url} alt="Cover" className="w-full h-full object-cover" /> : <ImageIcon size={20} />}
+                      </div>
+                      <div className="flex-1">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleImageUpload(e, 'cover', false)}
+                          className="text-xs text-slate-400"
+                        />
+                        {uploadingCover && <p className="text-amber-400 text-[10px] mt-1">جارٍ رفع الغلاف إلى MinIO...</p>}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -421,6 +552,120 @@ export const StoresPage: React.FC = () => {
         </div>
       )}
 
+      {/* Edit Store Modal */}
+      {editingStore && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 max-h-[90vh] overflow-y-auto space-y-5">
+            <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+              <Edit2 className="text-amber-400" size={20} />
+              تعديل بيانات المتجر ({editingStore.name})
+            </h2>
+
+            <form onSubmit={handleUpdateStore} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-400 mb-1">اسم المتجر *</label>
+                <input
+                  type="text"
+                  required
+                  value={editStoreData.name}
+                  onChange={(e) => setEditStoreData({ ...editStoreData, name: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">الاسم المستعار (Slug)</label>
+                <input
+                  type="text"
+                  value={editStoreData.slug}
+                  onChange={(e) => {
+                    const val = e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+                    setEditStoreData({ ...editStoreData, slug: val });
+                  }}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 text-left font-mono"
+                  dir="ltr"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">رقم الهاتف</label>
+                <input
+                  type="text"
+                  value={editStoreData.phone}
+                  onChange={(e) => setEditStoreData({ ...editStoreData, phone: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100"
+                />
+              </div>
+
+              {/* Edit Logo */}
+              <div className="space-y-2">
+                <label className="block text-slate-400">شعار المتجر (Logo)</label>
+                <div className="flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center text-slate-500 overflow-hidden shrink-0">
+                    {editStoreData.logo_url ? <img src={editStoreData.logo_url} alt="Logo" className="w-full h-full object-cover" /> : <ImageIcon size={20} />}
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageUpload(e, 'logo', true)}
+                      className="text-xs text-slate-400"
+                    />
+                    {uploadingEditLogo && <p className="text-amber-400 text-[10px] mt-1">جارٍ رفع الشعار الجديد إلى MinIO...</p>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Edit Cover */}
+              <div className="space-y-2">
+                <label className="block text-slate-400">صورة الغلاف (Cover)</label>
+                <div className="flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center text-slate-500 overflow-hidden shrink-0">
+                    {editStoreData.cover_url ? <img src={editStoreData.cover_url} alt="Cover" className="w-full h-full object-cover" /> : <ImageIcon size={20} />}
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageUpload(e, 'cover', true)}
+                      className="text-xs text-slate-400"
+                    />
+                    {uploadingEditCover && <p className="text-amber-400 text-[10px] mt-1">جارٍ رفع الغلاف الجديد إلى MinIO...</p>}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">وصف المتجر</label>
+                <textarea
+                  value={editStoreData.description}
+                  onChange={(e) => setEditStoreData({ ...editStoreData, description: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 h-20 resize-none"
+                ></textarea>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingStore(null)}
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl font-bold cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingStore}
+                  className="px-5 py-2 bg-amber-500 text-slate-950 rounded-xl font-bold cursor-pointer hover:bg-amber-600 disabled:opacity-50"
+                >
+                  {updatingStore ? 'جارٍ الحفظ...' : 'حفظ التعديلات'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delivery Fees Modal */}
       {selectedStoreFees && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 space-y-5">
@@ -485,3 +730,5 @@ export const StoresPage: React.FC = () => {
     </div>
   );
 };
+
+export default StoresPage;

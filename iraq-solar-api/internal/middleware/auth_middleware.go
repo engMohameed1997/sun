@@ -26,7 +26,7 @@ func AuthMiddleware(authService *service.AuthService) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := authService.ValidateTokenWithContext(c.Request.Context(), parts[1])
+		claims, user, err := authService.ValidateTokenWithContext(c.Request.Context(), parts[1])
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 			c.Abort()
@@ -36,6 +36,44 @@ func AuthMiddleware(authService *service.AuthService) gin.HandlerFunc {
 		c.Set("user_id", claims.UserID)
 		c.Set("phone", claims.Phone)
 		c.Set("role", claims.Role)
+		if user != nil && user.GovernorateID != nil {
+			c.Set("governorate_id", *user.GovernorateID)
+		}
+		c.Next()
+	}
+}
+
+// OptionalAuthMiddleware validates JWT token if provided in Authorization header.
+// If no Authorization header is present, it proceeds as guest without setting context claims.
+// If an Authorization header IS present but invalid, it returns 401 Unauthorized.
+func OptionalAuthMiddleware(authService *service.AuthService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.Next()
+			return
+		}
+
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header format"})
+			c.Abort()
+			return
+		}
+
+		claims, user, err := authService.ValidateTokenWithContext(c.Request.Context(), parts[1])
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			c.Abort()
+			return
+		}
+
+		c.Set("user_id", claims.UserID)
+		c.Set("phone", claims.Phone)
+		c.Set("role", claims.Role)
+		if user != nil && user.GovernorateID != nil {
+			c.Set("governorate_id", *user.GovernorateID)
+		}
 		c.Next()
 	}
 }
@@ -63,7 +101,7 @@ func WSAuthMiddleware(authService *service.AuthService) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := authService.ValidateTokenWithContext(c.Request.Context(), tokenStr)
+		claims, user, err := authService.ValidateTokenWithContext(c.Request.Context(), tokenStr)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 			c.Abort()
@@ -73,6 +111,9 @@ func WSAuthMiddleware(authService *service.AuthService) gin.HandlerFunc {
 		c.Set("user_id", claims.UserID)
 		c.Set("phone", claims.Phone)
 		c.Set("role", claims.Role)
+		if user != nil && user.GovernorateID != nil {
+			c.Set("governorate_id", *user.GovernorateID)
+		}
 		c.Next()
 	}
 }

@@ -115,7 +115,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 }
               }),
               _buildAdminTile('إعدادات الأسعار والمحافظات', Icons.settings_suggest_rounded, () {
-                AppNotification.showSuccess(context, 'أسعار الصرف محدثة تلقائياً (1$ = 1500 IQD)');
+                AppNotification.showSuccess(context, 'أسعار الصرف محدثة تلقائياً (1\$ = 1500 IQD)');
               }),
             ],
           ),

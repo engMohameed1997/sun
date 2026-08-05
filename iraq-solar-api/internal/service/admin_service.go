@@ -14,20 +14,17 @@ import (
 type AdminService struct {
 	adminRepo        *repository.AdminRepository
 	governorateRepo  *repository.GovernorateRepository
-	bannerRepo       *repository.BannerRepository
 	notificationRepo *repository.NotificationRepository
 }
 
 func NewAdminService(
 	adminRepo *repository.AdminRepository,
 	governorateRepo *repository.GovernorateRepository,
-	bannerRepo *repository.BannerRepository,
 	notificationRepo *repository.NotificationRepository,
 ) *AdminService {
 	return &AdminService{
 		adminRepo:        adminRepo,
 		governorateRepo:  governorateRepo,
-		bannerRepo:       bannerRepo,
 		notificationRepo: notificationRepo,
 	}
 }
@@ -154,13 +151,13 @@ func (s *AdminService) ListProducts(ctx context.Context, pType, search string, p
 	return s.adminRepo.ListAllProducts(ctx, pType, search, page, perPage)
 }
 
-func (s *AdminService) UpdateProduct(ctx context.Context, adminID uuid.UUID, id uuid.UUID, name, model string, priceIQD float64, stockQty int, isAvailable bool) error {
-	err := s.adminRepo.UpdateProduct(ctx, id, name, model, priceIQD, stockQty, isAvailable)
+func (s *AdminService) UpdateProduct(ctx context.Context, adminID uuid.UUID, p *domain.Product) error {
+	err := s.adminRepo.UpdateProduct(ctx, p)
 	if err == nil {
-		_ = s.adminRepo.CreateAuditLog(ctx, &adminID, "UPDATE_PRODUCT", "product", id.String(), map[string]interface{}{
-			"name":  name,
-			"price": priceIQD,
-			"stock": stockQty,
+		_ = s.adminRepo.CreateAuditLog(ctx, &adminID, "UPDATE_PRODUCT", "product", p.ID.String(), map[string]interface{}{
+			"name":  p.Name,
+			"price": p.PriceIQD,
+			"stock": p.StockQuantity,
 		})
 	}
 	return err
@@ -209,44 +206,6 @@ func (s *AdminService) ToggleGovernorateActive(ctx context.Context, adminID uuid
 
 func (s *AdminService) DeleteGovernorate(ctx context.Context, adminID uuid.UUID, id int) error {
 	return s.governorateRepo.Delete(ctx, id)
-}
-
-// ─── Banners Management ───
-
-func (s *AdminService) ListHomeBanners(ctx context.Context) ([]domain.HomeBanner, error) {
-	return s.bannerRepo.ListHomeBanners(ctx)
-}
-
-func (s *AdminService) CreateHomeBanner(ctx context.Context, adminID uuid.UUID, b *domain.HomeBanner) error {
-	b.ID = uuid.New()
-	err := s.bannerRepo.CreateHomeBanner(ctx, b)
-	if err == nil {
-		_ = s.adminRepo.CreateAuditLog(ctx, &adminID, "CREATE_HOME_BANNER", "banner", b.ID.String(), map[string]interface{}{
-			"title": b.Title,
-		})
-	}
-	return err
-}
-
-func (s *AdminService) UpdateHomeBanner(ctx context.Context, adminID uuid.UUID, id uuid.UUID, title, subtitle, imageURL, linkURL string, displayOrder int, isActive bool) error {
-	return s.bannerRepo.UpdateHomeBanner(ctx, id, title, subtitle, imageURL, linkURL, displayOrder, isActive)
-}
-
-func (s *AdminService) DeleteHomeBanner(ctx context.Context, adminID uuid.UUID, id uuid.UUID) error {
-	return s.bannerRepo.DeleteHomeBanner(ctx, id)
-}
-
-func (s *AdminService) ListStoreBanners(ctx context.Context, merchantID uuid.UUID) ([]domain.StoreBanner, error) {
-	return s.bannerRepo.ListStoreBanners(ctx, merchantID)
-}
-
-func (s *AdminService) CreateStoreBanner(ctx context.Context, b *domain.StoreBanner) error {
-	b.ID = uuid.New()
-	return s.bannerRepo.CreateStoreBanner(ctx, b)
-}
-
-func (s *AdminService) DeleteStoreBanner(ctx context.Context, id uuid.UUID) error {
-	return s.bannerRepo.DeleteStoreBanner(ctx, id)
 }
 
 // ─── Audit Logs & Settings ───

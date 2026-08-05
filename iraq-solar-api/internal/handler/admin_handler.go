@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -389,11 +390,20 @@ func (h *AdminHandler) ListProducts(c *gin.Context) {
 }
 
 type UpdateProductReq struct {
-	Name          string  `json:"name" binding:"required"`
-	Model         string  `json:"model" binding:"required"`
-	PriceIQD      float64 `json:"price_iqd" binding:"required,gt=0"`
-	StockQuantity int     `json:"stock_quantity" binding:"gte=0"`
-	IsAvailable   bool    `json:"is_available"`
+	CategoryID        *int               `json:"category_id"`
+	StoreID           *uuid.UUID         `json:"store_id"`
+	BranchID          *uuid.UUID         `json:"branch_id"`
+	BrandID           *uuid.UUID         `json:"brand_id"`
+	SKU               string             `json:"sku"`
+	Name              string             `json:"name" binding:"required"`
+	Model             string             `json:"model" binding:"required"`
+	Type              domain.ProductType `json:"type"`
+	PriceIQD          float64            `json:"price_iqd" binding:"required,gt=0"`
+	StockQuantity     int                `json:"stock_quantity" binding:"gte=0"`
+	LowStockThreshold int                `json:"low_stock_threshold"`
+	Specifications    json.RawMessage    `json:"specifications"`
+	Images            []string           `json:"images"`
+	IsAvailable       bool               `json:"is_available"`
 }
 
 func (h *AdminHandler) UpdateProduct(c *gin.Context) {
@@ -409,13 +419,37 @@ func (h *AdminHandler) UpdateProduct(c *gin.Context) {
 		return
 	}
 
+	specs := req.Specifications
+	if len(specs) == 0 {
+		specs = json.RawMessage("{}")
+	}
+
+	product := &domain.Product{
+		ID:                id,
+		CategoryID:        req.CategoryID,
+		StoreID:           req.StoreID,
+		BranchID:          req.BranchID,
+		BrandID:           req.BrandID,
+		SKU:               req.SKU,
+		Name:              req.Name,
+		Model:             req.Model,
+		Type:              req.Type,
+		PriceIQD:          req.PriceIQD,
+		StockQuantity:     req.StockQuantity,
+		LowStockThreshold: req.LowStockThreshold,
+		Specifications:    specs,
+		Images:            req.Images,
+		IsAvailable:       true,
+		UpdatedAt:         time.Now(),
+	}
+
 	adminID := h.getAdminID(c)
-	if err := h.adminService.UpdateProduct(c.Request.Context(), adminID, id, req.Name, req.Model, req.PriceIQD, req.StockQuantity, req.IsAvailable); err != nil {
+	if err := h.adminService.UpdateProduct(c.Request.Context(), adminID, product); err != nil {
 		utils.InternalServerError(c, err)
 		return
 	}
 
-	utils.SuccessResponse(c, http.StatusOK, "تم تحديث المنتج بنجاح", gin.H{"id": id})
+	utils.SuccessResponse(c, http.StatusOK, "تم تحديث المنتج بنجاح", product)
 }
 
 func (h *AdminHandler) DeleteProduct(c *gin.Context) {
@@ -537,75 +571,6 @@ func (h *AdminHandler) DeleteGovernorate(c *gin.Context) {
 	}
 
 	utils.SuccessResponse(c, http.StatusOK, "تم حذف المحافظة بنجاح", gin.H{"id": id})
-}
-
-// ─── Banners Management ───
-
-func (h *AdminHandler) ListHomeBanners(c *gin.Context) {
-	banners, err := h.adminService.ListHomeBanners(c.Request.Context())
-	if err != nil {
-		utils.InternalServerError(c, err)
-		return
-	}
-	utils.SuccessResponse(c, http.StatusOK, "تم جلب إعلانات الصفحة الرئيسية بنجاح", banners)
-}
-
-type CreateHomeBannerReq struct {
-	Title        string     `json:"title" binding:"required"`
-	Subtitle     string     `json:"subtitle"`
-	ImageURL     string     `json:"image_url" binding:"required"`
-	LinkURL      string     `json:"link_url"`
-	DisplayOrder int        `json:"display_order"`
-	IsActive     bool       `json:"is_active"`
-	StartsAt     *time.Time `json:"starts_at"`
-	EndsAt       *time.Time `json:"ends_at"`
-}
-
-func (h *AdminHandler) CreateHomeBanner(c *gin.Context) {
-	var req CreateHomeBannerReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.BadRequestError(c, "بيانات الإعلان غير صالحة", err)
-		return
-	}
-
-	titlePtr := &req.Title
-	subtitlePtr := &req.Subtitle
-	linkPtr := &req.LinkURL
-
-	adminID := h.getAdminID(c)
-	b := &domain.HomeBanner{
-		Title:        titlePtr,
-		Subtitle:     subtitlePtr,
-		ImageURL:     req.ImageURL,
-		LinkURL:      linkPtr,
-		DisplayOrder: req.DisplayOrder,
-		IsActive:     req.IsActive,
-		StartsAt:     req.StartsAt,
-		EndsAt:       req.EndsAt,
-	}
-
-	if err := h.adminService.CreateHomeBanner(c.Request.Context(), adminID, b); err != nil {
-		utils.InternalServerError(c, err)
-		return
-	}
-
-	utils.SuccessResponse(c, http.StatusCreated, "تم إنشاء الإعلان بنجاح", b)
-}
-
-func (h *AdminHandler) DeleteHomeBanner(c *gin.Context) {
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		utils.BadRequestError(c, "معرف الإعلان غير صالح", err)
-		return
-	}
-
-	adminID := h.getAdminID(c)
-	if err := h.adminService.DeleteHomeBanner(c.Request.Context(), adminID, id); err != nil {
-		utils.InternalServerError(c, err)
-		return
-	}
-
-	utils.SuccessResponse(c, http.StatusOK, "تم حذف الإعلان بنجاح", gin.H{"id": id})
 }
 
 // ─── Audit Logs & Settings ───

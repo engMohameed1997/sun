@@ -425,7 +425,7 @@ func (r *AdminRepository) ListAllProducts(ctx context.Context, pType, search str
 	var total int
 	r.db.GetContext(ctx, &total, fmt.Sprintf("SELECT COUNT(*) FROM products p WHERE %s", whereClause), args...)
 
-	query := fmt.Sprintf(`SELECT p.id, p.category_id, p.merchant_id, p.store_id, p.branch_id, p.sku, p.name, p.brand_id, b.name AS brand_name, p.model, p.type, p.price_iqd, p.stock_quantity, p.reserved_quantity, p.low_stock_threshold, p.specifications, p.is_available, p.created_at, p.updated_at, p.deleted_at
+	query := fmt.Sprintf(`SELECT p.id, p.category_id, p.merchant_id, p.store_id, p.branch_id, p.sku, p.name, p.brand_id, b.name AS brand_name, p.model, p.type, p.price_iqd, p.stock_quantity, p.reserved_quantity, p.low_stock_threshold, p.specifications, p.images, p.is_available, p.created_at, p.updated_at, p.deleted_at
 		FROM products p LEFT JOIN brands b ON p.brand_id = b.id WHERE %s ORDER BY p.created_at DESC LIMIT $%d OFFSET $%d`, whereClause, argIdx, argIdx+1)
 	args = append(args, perPage, offset)
 
@@ -434,12 +434,27 @@ func (r *AdminRepository) ListAllProducts(ctx context.Context, pType, search str
 	return products, total, err
 }
 
-func (r *AdminRepository) UpdateProduct(ctx context.Context, id uuid.UUID, name, model string, priceIQD float64, stockQty int, isAvailable bool) error {
+func (r *AdminRepository) UpdateProduct(ctx context.Context, p *domain.Product) error {
 	if r.db == nil {
 		return nil
 	}
-	_, err := r.db.ExecContext(ctx, `UPDATE products SET name=$1, model=$2, price_iqd=$3, stock_quantity=$4, is_available=$5, updated_at=NOW() WHERE id=$6`,
-		name, model, priceIQD, stockQty, isAvailable, id)
+	query := `UPDATE products SET 
+		name = $1, 
+		model = $2, 
+		price_iqd = $3, 
+		stock_quantity = $4, 
+		low_stock_threshold = $5,
+		is_available = $6, 
+		images = $7, 
+		specifications = $8,
+		category_id = COALESCE($9, category_id),
+		brand_id = COALESCE($10, brand_id),
+		store_id = COALESCE($11, store_id),
+		branch_id = COALESCE($12, branch_id),
+		updated_at = NOW() 
+		WHERE id = $13 AND deleted_at IS NULL`
+	_, err := r.db.ExecContext(ctx, query,
+		p.Name, p.Model, p.PriceIQD, p.StockQuantity, p.LowStockThreshold, p.IsAvailable, p.Images, p.Specifications, p.CategoryID, p.BrandID, p.StoreID, p.BranchID, p.ID)
 	return err
 }
 
@@ -608,7 +623,7 @@ func (r *AdminRepository) ListMerchantProducts(ctx context.Context, merchantID u
 	var total int
 	r.db.GetContext(ctx, &total, fmt.Sprintf("SELECT COUNT(*) FROM products p WHERE %s", whereClause), args...)
 
-	query := fmt.Sprintf(`SELECT p.id, p.category_id, p.merchant_id, p.store_id, p.branch_id, p.sku, p.name, p.brand_id, b.name AS brand_name, p.model, p.type, p.price_iqd, p.stock_quantity, p.reserved_quantity, p.low_stock_threshold, p.specifications, p.is_available, p.created_at, p.updated_at, p.deleted_at
+	query := fmt.Sprintf(`SELECT p.id, p.category_id, p.merchant_id, p.store_id, p.branch_id, p.sku, p.name, p.brand_id, b.name AS brand_name, p.model, p.type, p.price_iqd, p.stock_quantity, p.reserved_quantity, p.low_stock_threshold, p.specifications, p.images, p.is_available, p.created_at, p.updated_at, p.deleted_at
 		FROM products p LEFT JOIN brands b ON p.brand_id = b.id WHERE %s ORDER BY p.created_at DESC LIMIT $%d OFFSET $%d`, whereClause, argIdx, argIdx+1)
 	args = append(args, perPage, offset)
 
@@ -621,7 +636,7 @@ func (r *AdminRepository) GetLowStockProducts(ctx context.Context) ([]domain.Pro
 	if r.db == nil {
 		return []domain.Product{}, nil
 	}
-	query := `SELECT p.id, p.category_id, p.merchant_id, p.store_id, p.branch_id, p.sku, p.name, p.brand_id, b.name AS brand_name, p.model, p.type, p.price_iqd, p.stock_quantity, p.reserved_quantity, p.low_stock_threshold, p.specifications, p.is_available, p.created_at, p.updated_at, p.deleted_at
+	query := `SELECT p.id, p.category_id, p.merchant_id, p.store_id, p.branch_id, p.sku, p.name, p.brand_id, b.name AS brand_name, p.model, p.type, p.price_iqd, p.stock_quantity, p.reserved_quantity, p.low_stock_threshold, p.specifications, p.images, p.is_available, p.created_at, p.updated_at, p.deleted_at
 		FROM products p LEFT JOIN brands b ON p.brand_id = b.id WHERE (p.stock_quantity - p.reserved_quantity) <= p.low_stock_threshold AND p.deleted_at IS NULL ORDER BY (p.stock_quantity - p.reserved_quantity) ASC`
 	var products []domain.Product
 	err := r.db.SelectContext(ctx, &products, query)

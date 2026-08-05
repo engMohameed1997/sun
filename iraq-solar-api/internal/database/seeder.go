@@ -13,6 +13,72 @@ func SeedDatabase(db *sqlx.DB) error {
 		return nil
 	}
 
+	// 0. Ensure uuid-ossp extension and enterprise banner tables exist
+	_, _ = db.Exec(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`)
+	_, _ = db.Exec(`ALTER TABLE products ADD COLUMN IF NOT EXISTS images TEXT[] DEFAULT '{}';`)
+	_, _ = db.Exec(`
+		CREATE TABLE IF NOT EXISTS banners (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			image_url TEXT NOT NULL,
+			mobile_image_url TEXT,
+			priority INT DEFAULT 0 CHECK (priority >= 0 AND priority <= 100),
+			display_order INT DEFAULT 0,
+			is_active BOOLEAN DEFAULT true,
+			starts_at TIMESTAMPTZ,
+			ends_at TIMESTAMPTZ,
+			action_type VARCHAR(50) DEFAULT 'none',
+			action_payload JSONB DEFAULT '{}',
+			targeting_rules JSONB DEFAULT '{"version": 1}',
+			recurrence_type VARCHAR(20) DEFAULT 'none',
+			recurrence_time VARCHAR(10),
+			recurrence_end TIMESTAMPTZ,
+			timezone VARCHAR(50) DEFAULT 'Asia/Baghdad',
+			created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+			merchant_id UUID REFERENCES users(id) ON DELETE CASCADE,
+			created_at TIMESTAMPTZ DEFAULT NOW(),
+			updated_at TIMESTAMPTZ DEFAULT NOW()
+		);
+
+		CREATE TABLE IF NOT EXISTS banner_placements (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			banner_id UUID NOT NULL REFERENCES banners(id) ON DELETE CASCADE,
+			placement VARCHAR(50) NOT NULL,
+			created_at TIMESTAMPTZ DEFAULT NOW(),
+			UNIQUE(banner_id, placement)
+		);
+
+		CREATE TABLE IF NOT EXISTS banner_stores (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			banner_id UUID NOT NULL REFERENCES banners(id) ON DELETE CASCADE,
+			store_id UUID REFERENCES stores(id) ON DELETE CASCADE,
+			branch_id UUID REFERENCES store_branches(id) ON DELETE CASCADE,
+			created_at TIMESTAMPTZ DEFAULT NOW()
+		);
+
+		CREATE TABLE IF NOT EXISTS banner_events (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			banner_id UUID NOT NULL REFERENCES banners(id) ON DELETE CASCADE,
+			event_type VARCHAR(20) NOT NULL,
+			user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+			device_id VARCHAR(255),
+			metadata JSONB DEFAULT '{}',
+			created_at TIMESTAMPTZ DEFAULT NOW()
+		);
+
+		CREATE TABLE IF NOT EXISTS banner_analytics_summary (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			banner_id UUID NOT NULL REFERENCES banners(id) ON DELETE CASCADE,
+			date DATE NOT NULL,
+			impressions INT DEFAULT 0,
+			clicks INT DEFAULT 0,
+			unique_views INT DEFAULT 0,
+			unique_clicks INT DEFAULT 0,
+			created_at TIMESTAMPTZ DEFAULT NOW(),
+			updated_at TIMESTAMPTZ DEFAULT NOW(),
+			UNIQUE(banner_id, date)
+		);
+	`)
+
 	// 0. Ensure v_orders_full view exists
 	_, _ = db.Exec(`
 		CREATE OR REPLACE VIEW v_orders_full AS
@@ -314,6 +380,186 @@ func SeedDatabase(db *sqlx.DB) error {
 			ON CONFLICT DO NOTHING`,
 			uuid.New(), "المدير العام للمنصة", "07801234567", string(hashedPass), "admin", "بغداد", "المنصور", true,
 		)
+	}
+
+	// 5. Seed Default Brands if empty
+	var brandCount int
+	err = db.Get(&brandCount, "SELECT COUNT(*) FROM brands")
+	if err == nil && brandCount == 0 {
+		log.Println("Seeding Solar Brands into DB...")
+		defaultBrands := []string{
+			"LONGi Solar",
+			"Deye",
+			"Felicity Solar",
+			"Huawei Solar",
+			"Trina Solar",
+			"Jinko Solar",
+			"Growatt",
+		}
+		for _, bName := range defaultBrands {
+			_, _ = db.Exec(`INSERT INTO brands (id, name, is_active, created_at, updated_at) VALUES ($1, $2, true, NOW(), NOW()) ON CONFLICT (name) DO NOTHING`, uuid.New(), bName)
+		}
+	}
+
+	// 6. Seed Default Merchants & Stores if empty
+	var storeCount int
+	err = db.Get(&storeCount, "SELECT COUNT(*) FROM stores")
+	if err == nil && storeCount == 0 {
+		log.Println("Seeding Default Merchant Stores into DB...")
+		hashedPass, _ := bcrypt.GenerateFromPassword([]byte("StorePass123!"), bcrypt.DefaultCost)
+
+		merchant1ID := uuid.New()
+		merchant2ID := uuid.New()
+
+		_, _ = db.Exec(`
+			INSERT INTO users (id, full_name, phone, password_hash, role, governorate, city, is_active, is_verified, created_at, updated_at)
+			VALUES ($1, 'شركة بغداد للطاقة الشمولية', '07701112233', $2, 'merchant', 'بغداد', 'الكرادة', true, true, NOW(), NOW())
+			ON CONFLICT DO NOTHING`, merchant1ID, string(hashedPass))
+
+		_, _ = db.Exec(`
+			INSERT INTO users (id, full_name, phone, password_hash, role, governorate, city, is_active, is_verified, created_at, updated_at)
+			VALUES ($1, 'دجلة للحلول الشمسية الهجينة', '07704445566', $2, 'merchant', 'البصرة', 'العشار', true, true, NOW(), NOW())
+			ON CONFLICT DO NOTHING`, merchant2ID, string(hashedPass))
+
+		store1ID := uuid.New()
+		store2ID := uuid.New()
+
+		_, _ = db.Exec(`
+			INSERT INTO stores (id, merchant_id, name, slug, description, logo_url, cover_url, phone, is_verified, is_active, rating, created_at, updated_at)
+			VALUES ($1, $2, 'متجر بغداد للطاقة الشمولية', 'baghdad-solar-store', 'متجر متخصص بتقديم أحدث المنظومات الشمسية والألواح والبطاريات الهجينة ذات الكفاءة العالية.', 'assets/images/solar_panel_longi.jpg', 'assets/images/solar_panel_longi.jpg', '07701112233', true, true, 4.9, NOW(), NOW())
+			ON CONFLICT DO NOTHING`, store1ID, merchant1ID)
+
+		_, _ = db.Exec(`
+			INSERT INTO stores (id, merchant_id, name, slug, description, logo_url, cover_url, phone, is_verified, is_active, rating, created_at, updated_at)
+			VALUES ($1, $2, 'دجلة للحلول الشمسية الهجينة', 'tigris-solar-solutions', 'موزع معتمد لمنتجات داي وفيلستي ولونجي مع ضمان حقيقي وخدمات دعم فني متكاملة.', 'assets/images/solar_panel_longi.jpg', 'assets/images/solar_panel_longi.jpg', '07704445566', true, true, 4.8, NOW(), NOW())
+			ON CONFLICT DO NOTHING`, store2ID, merchant2ID)
+
+		_, _ = db.Exec(`UPDATE stores SET logo_url = 'assets/images/solar_panel_longi.jpg' WHERE logo_url IS NULL OR logo_url = ''`)
+		_, _ = db.Exec(`UPDATE stores SET cover_url = 'assets/images/solar_panel_longi.jpg' WHERE cover_url IS NULL OR cover_url = ''`)
+
+		// 7. Seed Default Solar Products if empty
+		var prodCount int
+		err = db.Get(&prodCount, "SELECT COUNT(*) FROM products")
+		if err == nil && prodCount == 0 {
+			log.Println("Seeding Solar Products into DB...")
+
+			var longiBrandID, deyeBrandID, felicityBrandID uuid.UUID
+			_ = db.Get(&longiBrandID, "SELECT id FROM brands WHERE name = 'LONGi Solar' LIMIT 1")
+			_ = db.Get(&deyeBrandID, "SELECT id FROM brands WHERE name = 'Deye' LIMIT 1")
+			_ = db.Get(&felicityBrandID, "SELECT id FROM brands WHERE name = 'Felicity Solar' LIMIT 1")
+
+			var catPanel, catInverter, catBattery, catStructure, catCable int
+			_ = db.Get(&catPanel, "SELECT id FROM categories WHERE name LIKE '%ألواح%' LIMIT 1")
+			_ = db.Get(&catInverter, "SELECT id FROM categories WHERE name LIKE '%عواكس%' OR name LIKE '%انفيرتر%' LIMIT 1")
+			_ = db.Get(&catBattery, "SELECT id FROM categories WHERE name LIKE '%بطاريات%' LIMIT 1")
+			_ = db.Get(&catStructure, "SELECT id FROM categories WHERE name LIKE '%هياكل%' LIMIT 1")
+			_ = db.Get(&catCable, "SELECT id FROM categories WHERE name LIKE '%كوابل%' LIMIT 1")
+
+			if catPanel == 0 { catPanel = 1 }
+			if catInverter == 0 { catInverter = 2 }
+			if catBattery == 0 { catBattery = 3 }
+			if catStructure == 0 { catStructure = 4 }
+			if catCable == 0 { catCable = 5 }
+
+			productsData := []struct {
+				Name       string
+				SKU        string
+				Model      string
+				Type       string
+				CatID      int
+				BrandID    *uuid.UUID
+				StoreID    uuid.UUID
+				MerchantID uuid.UUID
+				PriceIQD   float64
+				Stock      int
+				Specs      string
+				Images     string
+			}{
+				{
+					Name:       "لوح طاقة شمسية LONGi 550W N-Type TOPCon",
+					SKU:        "LONG-550W-N",
+					Model:      "Hi-MO 6 TOPCon 550W",
+					Type:       "panel",
+					CatID:      catPanel,
+					BrandID:    &longiBrandID,
+					StoreID:    store1ID,
+					MerchantID: merchant1ID,
+					PriceIQD:   175000,
+					Stock:      140,
+					Specs:      `{"القدرة الاسمية": "550 Watt", "التكنولوجيا": "N-Type TOPCon Dual Glass", "الكفاءة": "22.5%", "الضمان": "25 سنة كفالة كفاءة وتوليد"}`,
+					Images:     `{"assets/images/solar_panel_longi.jpg"}`,
+				},
+				{
+					Name:       "انفيرتر هجين Deye 8kW Three Phase 48V",
+					SKU:        "DEYE-INV-8KW-3P",
+					Model:      "SUN-8K-SG04LP3-EU",
+					Type:       "inverter",
+					CatID:      catInverter,
+					BrandID:    &deyeBrandID,
+					StoreID:    store2ID,
+					MerchantID: merchant2ID,
+					PriceIQD:   1875000,
+					Stock:      25,
+					Specs:      `{"القدرة": "8000 Watt", "النظام": "Three Phase 48V Hybrid", "الكفاءة العظمى": "97.6%", "الضمان": "5 سنوات كفالة استبدال مصنعية"}`,
+					Images:     `{"assets/images/solar_panel_longi.jpg"}`,
+				},
+				{
+					Name:       "بطارية ليثيوم Felicity 10kWh LiFePO4 Wall Mount",
+					SKU:        "FEL-BAT-10KW",
+					Model:      "LPBF48200-N 51.2V 200Ah",
+					Type:       "battery",
+					CatID:      catBattery,
+					BrandID:    &felicityBrandID,
+					StoreID:    store1ID,
+					MerchantID: merchant1ID,
+					PriceIQD:   2450000,
+					Stock:      18,
+					Specs:      `{"السعة": "10.24 kWh (200Ah)", "النوع": "LiFePO4 الجدارية الذكية", "عدد الدورات": "6000+ Cycle", "الضمان": "10 سنوات ضمان حقيقي"}`,
+					Images:     `{"assets/images/solar_panel_longi.jpg"}`,
+				},
+				{
+					Name:       "هيكل تثبيت ألمنيوم مقاوم للرياح (4 ألواح)",
+					SKU:        "ALU-STR-4P",
+					Model:      "SOLAR-MOUNT-AL4",
+					Type:       "structure",
+					CatID:      catStructure,
+					BrandID:    nil,
+					StoreID:    store2ID,
+					MerchantID: merchant2ID,
+					PriceIQD:   95000,
+					Stock:      80,
+					Specs:      `{"المادة": "ألمنيوم AL6005-T5 وعوارض مجلفنة", "سعة الهيكل": "4 ألواح شمسية 550W", "الضمان": "15 سنة ضد الصدأ والرياح"}`,
+					Images:     `{"assets/images/solar_panel_longi.jpg"}`,
+				},
+				{
+					Name:       "كابل شمسي DC قياس 6mm2 مقاوم للشمس (100 متر)",
+					SKU:        "CAB-DC-6MM",
+					Model:      "SOLAR-CABLE-6MM2-100M",
+					Type:       "cable",
+					CatID:      catCable,
+					BrandID:    nil,
+					StoreID:    store1ID,
+					MerchantID: merchant1ID,
+					PriceIQD:   120000,
+					Stock:      50,
+					Specs:      `{"المواصفات": "نحاس ملقم مطلي بالقصدير IP67", "الطول": "لفة 100 متر", "الضمان": "20 سنة ضمان العزل"}`,
+					Images:     `{"assets/images/solar_panel_longi.jpg"}`,
+				},
+			}
+
+			for _, p := range productsData {
+				var brandVal *uuid.UUID
+				if p.BrandID != nil && *p.BrandID != uuid.Nil {
+					brandVal = p.BrandID
+				}
+				_, _ = db.Exec(`
+					INSERT INTO products (id, category_id, merchant_id, store_id, sku, name, brand_id, model, type, price_iqd, stock_quantity, specifications, images, is_available, created_at, updated_at)
+					VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::text[], true, NOW(), NOW())
+					ON CONFLICT DO NOTHING`,
+					uuid.New(), p.CatID, p.MerchantID, p.StoreID, p.SKU, p.Name, brandVal, p.Model, p.Type, p.PriceIQD, p.Stock, p.Specs, p.Images,
+				)
+			}
+		}
 	}
 
 	return nil

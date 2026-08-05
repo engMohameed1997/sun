@@ -12,13 +12,14 @@ import (
 )
 
 type MinIOService struct {
-	client   *minio.Client
-	bucket   string
-	endpoint string
-	useSSL   bool
+	client         *minio.Client
+	bucket         string
+	endpoint       string
+	publicEndpoint string
+	useSSL         bool
 }
 
-func NewMinIOService(endpoint, accessKey, secretKey, bucket string, useSSL bool) (*MinIOService, error) {
+func NewMinIOService(endpoint, publicEndpoint, accessKey, secretKey, bucket string, useSSL bool) (*MinIOService, error) {
 	client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 		Secure: useSSL,
@@ -27,11 +28,16 @@ func NewMinIOService(endpoint, accessKey, secretKey, bucket string, useSSL bool)
 		return nil, err
 	}
 
+	if publicEndpoint == "" {
+		publicEndpoint = endpoint
+	}
+
 	return &MinIOService{
-		client:   client,
-		bucket:   bucket,
-		endpoint: endpoint,
-		useSSL:   useSSL,
+		client:         client,
+		bucket:         bucket,
+		endpoint:       endpoint,
+		publicEndpoint: publicEndpoint,
+		useSSL:         useSSL,
 	}, nil
 }
 
@@ -78,5 +84,5 @@ func (s *MinIOService) GetImageURL(objectName string) string {
 	if s.useSSL {
 		scheme = "https"
 	}
-	return fmt.Sprintf("%s://%s/%s/%s", scheme, s.endpoint, s.bucket, objectName)
+	return fmt.Sprintf("%s://%s/%s/%s", scheme, s.publicEndpoint, s.bucket, objectName)
 }

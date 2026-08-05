@@ -144,12 +144,32 @@ export function useOrdersWebSocket(options: UseOrdersWebSocketOptions = {}) {
     };
   }, [enabled, baseUrl, token, startPingInterval, clearTimers]);
 
+function safelyCloseWebSocket(ws: WebSocket) {
+  ws.onmessage = null;
+  ws.onerror = null;
+
+  if (ws.readyState === WebSocket.CONNECTING) {
+    ws.onopen = () => {
+      ws.onclose = null;
+      ws.close();
+    };
+    ws.onclose = null;
+  } else {
+    ws.onopen = null;
+    ws.onclose = null;
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.close();
+    }
+  }
+}
+
   const disconnect = useCallback(() => {
     manualCloseRef.current = true;
     clearTimers();
     if (wsRef.current) {
-      wsRef.current.close();
+      const ws = wsRef.current;
       wsRef.current = null;
+      safelyCloseWebSocket(ws);
     }
     setStatus('disconnected');
   }, [clearTimers]);
@@ -162,7 +182,11 @@ export function useOrdersWebSocket(options: UseOrdersWebSocketOptions = {}) {
     return () => {
       manualCloseRef.current = true;
       clearTimers();
-      wsRef.current?.close();
+      if (wsRef.current) {
+        const ws = wsRef.current;
+        wsRef.current = null;
+        safelyCloseWebSocket(ws);
+      }
     };
   }, [enabled, token]); // eslint-disable-line react-hooks/exhaustive-deps
 

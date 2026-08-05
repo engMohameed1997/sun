@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/iraq-solar/api/internal/cache"
 	"github.com/iraq-solar/api/internal/config"
 	"github.com/iraq-solar/api/internal/database"
 	"github.com/iraq-solar/api/internal/domain"
@@ -29,13 +30,15 @@ func main() {
 	// 1. Load Configurations
 	cfg := config.Load()
 
-	// 2. Initialize Database Connection
+	// 2. Initialize Database Connection & Redis Cache
 	db, err := database.Connect(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Fatal: DB Connection failed: %v", err)
 	}
 	defer db.Close()
 	_ = database.SeedDatabase(db)
+
+	redisCache := cache.NewRedisCache(cfg.RedisURL)
 
 	// 3. Initialize Repositories
 	userRepo := repository.NewUserRepository(db)
@@ -64,10 +67,11 @@ func main() {
 	notificationService := service.NewNotificationService(notificationRepo, realtimeHub)
 	orderService := service.NewOrderService(orderRepo, productRepo, realtimeHub, notificationService)
 	orderService.StartPendingOrdersCleanupCron(context.Background(), 15*time.Minute, 24)
-	adminService := service.NewAdminService(adminRepo, governorateRepo, bannerRepo, notificationRepo)
+	adminService := service.NewAdminService(adminRepo, governorateRepo, notificationRepo)
 	ticketService := service.NewSupportTicketService(ticketRepo)
+	bannerService := service.NewBannerService(bannerRepo, redisCache, cfg.RedisBannerCacheTTL)
 
-	minioService, minioErr := service.NewMinIOService(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey, cfg.MinIOBucket, cfg.MinIOUseSSL)
+	minioService, minioErr := service.NewMinIOService(cfg.MinIOEndpoint, cfg.MinIOPublicEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey, cfg.MinIOBucket, cfg.MinIOUseSSL)
 	if minioErr != nil {
 		log.Printf("MinIO initialization notice: %v", minioErr)
 	} else if minioService != nil {
@@ -88,6 +92,7 @@ func main() {
 	installerHandler := handler.NewInstallerHandler(userRepo)
 	profileHandler := handler.NewProfileHandler(userRepo)
 	ticketHandler := handler.NewSupportTicketHandler(ticketService)
+	bannerHandler := handler.NewBannerHandler(bannerService)
 
 	// 6. Setup Gin Router & Global Security Middlewares
 	if cfg.Environment == "production" {
@@ -100,6 +105,9 @@ func main() {
 	router.Use(middleware.CORSMiddleware())
 	router.Use(middleware.SecurityHeadersMiddleware())
 	router.Use(middleware.RateLimiterMiddleware(100))
+
+	_ = os.MkdirAll("./uploads", 0755)
+	router.Static("/uploads", "./uploads")
 
 	// Health Check Endpoint
 	router.GET("/health", func(c *gin.Context) {
@@ -126,6 +134,7 @@ func main() {
 		{
 			authGroup.POST("/register", authHandler.Register)
 			authGroup.POST("/login", authHandler.Login)
+			authGroup.POST("/admin-login", authHandler.Login)
 			authGroup.POST("/refresh", authHandler.Refresh)
 			authGroup.POST("/logout", authHandler.Logout)
 		}
@@ -156,7 +165,8 @@ func main() {
 		v1.GET("/brands", brandHandler.ListBrands)
 		v1.GET("/governorates", adminHandler.ListGovernorates)
 		v1.GET("/governorates/:id/districts", adminHandler.ListDistricts)
-		v1.GET("/banners", adminHandler.ListHomeBanners)
+		v1.GET("/banners", middleware.OptionalAuthMiddleware(authService), bannerHandler.GetActiveBanners)
+		v1.POST("/banners/:id/track", bannerHandler.TrackBannerEvent)
 		// Stores (Public)
 		v1.GET("/stores", storeHandler.ListStores)
 		v1.GET("/stores/:id", storeHandler.GetStore)
@@ -175,6 +185,10 @@ func main() {
 		// --- WebSocket Routes (use WSAuthMiddleware — token via query param) ---
 		// App users: real-time notifications
 		v1.GET("/ws/notifications", middleware.WSAuthMiddleware(authService), wsHandler.HandleAppNotifications)
+		// Orders WebSocket — real-time order events for admins & merchants
+		v1.GET("/ws/orders", middleware.WSAuthMiddleware(authService), wsHandler.HandleAdminOrders)
+		// Notifications WebSocket (legacy — kept for admin React dashboard)
+		v1.GET("/admin/notifications/ws", middleware.WSAuthMiddleware(authService), wsHandler.HandleAdminOrders)
 
 		// Protected Routes (Requires JWT Auth)
 		protected := v1.Group("")
@@ -228,6 +242,16 @@ func main() {
 				merchantGroup.DELETE("/:id", productHandler.DeleteMerchantProduct)
 			}
 
+			// Merchant Banner Management Routes
+			merchantBanners := protected.Group("/merchant/banners")
+			merchantBanners.Use(middleware.RequireRole(domain.RoleMerchant, domain.RoleAdmin))
+			{
+				merchantBanners.GET("", bannerHandler.ListAdminBanners)
+				merchantBanners.POST("", bannerHandler.CreateBanner)
+				merchantBanners.PUT("/:id", bannerHandler.UpdateBanner)
+				merchantBanners.DELETE("/:id", bannerHandler.DeleteBanner)
+			}
+
 			// Admin Product Management Routes
 			adminProducts := protected.Group("/products")
 			adminProducts.Use(middleware.RequireRole(domain.RoleAdmin, domain.RoleMerchant))
@@ -235,7 +259,8 @@ func main() {
 				adminProducts.POST("", productHandler.CreateProduct)
 			}
 
-			// Image Upload Route
+			// Image Upload Routes
+			protected.POST("/upload", uploadHandler.UploadImage)
 			protected.POST("/upload/image", uploadHandler.UploadImage)
 
 			// Notifications REST API
@@ -248,11 +273,6 @@ func main() {
 				notifGroup.DELETE("/:id", notifHandler.DeleteNotification)
 			}
 
-			// Notifications WebSocket (legacy — kept for admin React dashboard)
-			protected.GET("/admin/notifications/ws", wsHandler.HandleAdminOrders)
-
-			// Orders WebSocket — real-time order events for admins & merchants
-			protected.GET("/ws/orders", wsHandler.HandleAdminOrders)
 
 			// Admin-only Endpoints (Full control panel API)
 			adminOnly := protected.Group("/admin")
@@ -318,9 +338,12 @@ func main() {
 				adminOnly.DELETE("/governorates/:id", adminHandler.DeleteGovernorate)
 
 				// Banners
-				adminOnly.GET("/banners", adminHandler.ListHomeBanners)
-				adminOnly.POST("/banners", adminHandler.CreateHomeBanner)
-				adminOnly.DELETE("/banners/:id", adminHandler.DeleteHomeBanner)
+				adminOnly.GET("/banners", bannerHandler.ListAdminBanners)
+				adminOnly.POST("/banners", bannerHandler.CreateBanner)
+				adminOnly.PUT("/banners/:id", bannerHandler.UpdateBanner)
+				adminOnly.DELETE("/banners/:id", bannerHandler.DeleteBanner)
+				adminOnly.PUT("/banners/reorder", bannerHandler.ReorderBanners)
+				adminOnly.GET("/banners/:id/analytics", bannerHandler.GetBannerAnalytics)
 
 				// Audit Logs & Settings
 				adminOnly.GET("/audit-logs", adminHandler.ListAuditLogs)

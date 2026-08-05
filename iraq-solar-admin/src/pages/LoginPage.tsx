@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 
 export const LoginPage: React.FC = () => {
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -17,7 +18,7 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
-      const res = await api.post('/auth/login', { Phone, password });
+      const res = await api.post('/auth/login', { phone, password });
       const { token, user } = res.data.data || res.data;
       if (!['admin', 'merchant'].includes(user.role)) {
         setError('حسابك غير مصرح له بالدخول لـ Admin Dashboard');
@@ -56,6 +57,21 @@ export const LoginPage: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          <div dir="ltr">
+            <label className="block text-xs font-semibold text-slate-300 mb-2 text-right">رقم الهاتف</label>
+            <div className="relative">
+              <input
+                type="tel"
+                required
+                dir="ltr"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="07700000000"
+                className="w-full bg-slate-950/70 border border-slate-800 rounded-xl px-4 py-3 pl-10 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 transition text-left"
+              />
+              <Phone size={18} className="absolute left-3 top-3.5 text-slate-500" />
+            </div>
+          </div>
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-2">كلمة المرور</label>
             <div className="relative">

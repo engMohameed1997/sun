@@ -73,6 +73,7 @@ class _PromotionsCatalogScreenState extends State<PromotionsCatalogScreen> {
             final storeRating = storeInfo?['rating'];
             final ratingStr = storeRating != null ? '$storeRating ⭐' : '—';
             final storePhone = storeInfo?['phone']?.toString() ?? '07700000000';
+            final rawImg = ApiClient.resolveImageUrl(m['images']) ?? ApiClient.resolveImageUrl(m['image_url']) ?? ApiClient.resolveImageUrl(m['image']);
             return {
               'id': m['id']?.toString() ?? '',
               'name': m['name'] ?? '',
@@ -86,9 +87,10 @@ class _PromotionsCatalogScreenState extends State<PromotionsCatalogScreen> {
               'stock': m['stock_quantity'] ?? 50,
               'type': m['type'] ?? 'panel',
               'specs': specsMap,
-              'image': 'assets/images/solar_panel_longi.jpg',
+              'image': rawImg ?? 'assets/images/solar_panel_longi.jpg',
+              'imageUrl': rawImg,
               'store': storeName,
-              'storeData': {
+              'storeData': storeInfo ?? {
                 'id': storeId,
                 'name': storeName,
                 'rating': ratingStr,

@@ -5,7 +5,7 @@ import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/widgets/product_image_widget.dart';
 import '../widgets/store_chat_dialog.dart';
-import '../widgets/store_banner_carousel.dart';
+import '../../../home/presentation/widgets/banner_carousel.dart';
 import '../../../products/presentation/screens/product_detail_screen.dart';
 import '../../../cart/presentation/screens/cart_screen.dart';
 
@@ -374,7 +374,10 @@ class _StoreDetailScreenState extends State<StoreDetailScreen> {
                         const SizedBox(height: 20),
 
                         // Store-Specific Auto-sliding Banner Carousel
-                        StoreBannerCarouselWidget(storeName: storeName),
+                        BannerCarouselWidget(
+                          placement: 'store',
+                          storeId: widget.storeData['id']?.toString(),
+                        ),
 
                         const SizedBox(height: 24),
 

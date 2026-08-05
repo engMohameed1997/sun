@@ -114,7 +114,7 @@ func (s *AuthService) NormalizePhone(phone string) (string, error) {
 
 	matched, _ := regexp.MatchString(`^07[3-9]\d{8}$`, cleaned)
 	if !matched {
-		return "", errors.New("رقم الهاتف غير صحيح. يجب أن يبدأ بـ 07 ويتكون من 11 رقماً (مثال: 07801234567)")
+		return "", errors.New("رقم الهاتف غير صحيح. يجب أن يبدأ بـ 07 ويتكون من 11 رقماً")
 	}
 
 	return cleaned, nil
@@ -202,22 +202,24 @@ func (s *AuthService) ValidateToken(tokenStr string) (*Claims, error) {
 	return claims, nil
 }
 
-func (s *AuthService) ValidateTokenWithContext(ctx context.Context, tokenStr string) (*Claims, error) {
+func (s *AuthService) ValidateTokenWithContext(ctx context.Context, tokenStr string) (*Claims, *domain.User, error) {
 	claims, err := s.ValidateToken(tokenStr)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
+	var foundUser *domain.User
 	if s.userRepo != nil {
 		user, err := s.userRepo.FindByID(ctx, claims.UserID)
 		if err == nil && user != nil {
 			if !user.IsActive {
-				return nil, errors.New("الحساب معطل أو محظور من قبل الإدارة")
+				return nil, nil, errors.New("الحساب معطل أو محظور من قبل الإدارة")
 			}
+			foundUser = user
 		}
 	}
 
-	return claims, nil
+	return claims, foundUser, nil
 }
 
 func (s *AuthService) RegisterUser(ctx context.Context, req domain.RegisterRequest) (*domain.User, string, string, error) {

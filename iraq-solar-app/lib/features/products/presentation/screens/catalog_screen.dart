@@ -6,6 +6,7 @@ import '../../../../core/data/mock_products_repository.dart';
 import '../../../../core/widgets/product_image_widget.dart';
 import '../../../merchant/presentation/screens/store_detail_screen.dart';
 import '../../../home/presentation/widgets/search_filter_sheet.dart';
+import '../../../home/presentation/widgets/banner_carousel.dart';
 import 'product_detail_screen.dart';
 
 class SolarCatalogScreen extends StatefulWidget {
@@ -31,6 +32,7 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
   String _selectedCategory = 'الكل';
   Map<String, dynamic>? _appliedFilters;
   final Set<String> _favoriteStoreIds = {'s1', 's2'};
+  bool _isLoading = true;
 
   final List<String> _categories = [
     'الكل',
@@ -69,87 +71,141 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
   }
 
   Future<void> _fetchLiveApiData() async {
-    final productsRes = await ApiClient.getProducts();
-    final storesRes = await ApiClient.getStores();
+    try {
+      final productsRes = await ApiClient.getProducts();
+      final storesRes = await ApiClient.getStores();
+      final catRes = await ApiClient.getCategories();
 
-    if (mounted) {
-      setState(() {
-        // Build stores map first for product lookups
-        Map<String, Map<String, dynamic>> storeMap = {};
-        if (storesRes['data'] != null) {
-          List storesList = [];
-          if (storesRes['data'] is Map) {
-            storesList = (storesRes['data'] as Map<String, dynamic>)['stores'] as List? ?? [];
-          } else if (storesRes['data'] is List) {
-            storesList = storesRes['data'] as List;
+      Map<int, String> categoryNames = {};
+      if (catRes['data'] != null && catRes['data'] is List) {
+        for (final cat in catRes['data'] as List) {
+          final cm = cat as Map<String, dynamic>;
+          if (cm['id'] is int && cm['name'] != null) {
+            categoryNames[cm['id'] as int] = cm['name'] as String;
           }
-          for (final s in storesList) {
-            final sm = s as Map<String, dynamic>;
-            storeMap[sm['id']?.toString() ?? ''] = sm;
-          }
-          _stores = storesList.map((s) {
-            final sm = s as Map<String, dynamic>;
-            return {
-              'id': sm['id']?.toString() ?? '',
-              'name': sm['name'] ?? 'متجر طاقة معتمد',
-              'rating': '${sm['rating'] ?? 0} ⭐',
-              'city': sm['phone'] ?? '07700000000',
-              'phone': sm['phone'] ?? '07700000000',
-              'verified': sm['is_verified'] ?? true,
-              'productsCount': 35,
-            };
-          }).toList();
         }
+      }
 
-        if (productsRes['data'] != null && productsRes['data'] is List) {
-          final list = productsRes['data'] as List;
-          _crossStoreProducts = list.map((item) {
-            final m = item as Map<String, dynamic>;
-            final priceRaw = (m['price_iqd'] ?? 0).toInt();
-            final priceFormatted = '${priceRaw.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match match) => '${match[1]},')} د.ع';
-            final rawSpecs = m['specifications'];
-            final specsMap = rawSpecs != null && rawSpecs is Map
-                ? Map<String, dynamic>.from(rawSpecs)
-                : <String, dynamic>{};
-            final warrantyVal = specsMap['الضمان']?.toString() ?? '';
-            final storeId = m['store_id']?.toString() ?? '';
-            final storeInfo = storeMap[storeId];
-            final storeName = storeInfo?['name']?.toString() ?? 'متجر غير محدد';
-            final storeRating = storeInfo?['rating'];
-            final ratingStr = storeRating != null ? '$storeRating ⭐' : '—';
-            final storePhone = storeInfo?['phone']?.toString() ?? '07700000000';
-            return {
-              'id': m['id']?.toString() ?? '',
-              'name': m['name'] ?? '',
-              'brand': m['brand_name'] ?? 'علامة معتمدة',
-              'model': m['model'] ?? '',
-              'store': storeName,
-              'store_description': storeInfo?['description'] ?? '',
-              'is_verified': storeInfo?['is_verified'] ?? false,
-              'storeName': storeName,
-              'category': m['category_id'] ?? 'منظومات شمسية',
-              'price': priceFormatted,
-              'priceIQD': priceFormatted,
-              'price_iqd': priceRaw,
-              'image': 'assets/images/solar_panel_longi.jpg',
-              'rating': ratingStr,
-              'warranty': warrantyVal,
-              'stock': m['stock_quantity'] ?? 50,
-              'type': m['type'] ?? 'panel',
-              'specs': specsMap,
-              'isFeatured': m['is_available'] ?? false,
-              'storeData': {
-                'id': storeId,
-                'name': storeName,
+      if (mounted) {
+        setState(() {
+          Map<String, Map<String, dynamic>> storeMap = {};
+          if (storesRes['data'] != null) {
+            List storesList = [];
+            if (storesRes['data'] is Map) {
+              storesList = (storesRes['data'] as Map<String, dynamic>)['stores'] as List? ?? [];
+            } else if (storesRes['data'] is List) {
+              storesList = storesRes['data'] as List;
+            }
+            for (final s in storesList) {
+              final sm = s as Map<String, dynamic>;
+              storeMap[sm['id']?.toString() ?? ''] = sm;
+            }
+            _stores = storesList.map((s) {
+              final sm = s as Map<String, dynamic>;
+              final logoUrl = ApiClient.resolveImageUrl(sm['logo_url'] ?? sm['logo']);
+              final coverUrl = ApiClient.resolveImageUrl(sm['cover_url'] ?? sm['cover']);
+              final storeCity = sm['city'] ?? sm['governorate'] ?? sm['address'] ?? (sm['phone'] != null ? 'بغداد / العراق' : 'العراق');
+              return {
+                'id': sm['id']?.toString() ?? '',
+                'name': sm['name'] ?? 'متجر طاقة معتمد',
+                'description': sm['description'] ?? '',
+                'logo_url': logoUrl,
+                'cover_url': coverUrl,
+                'logo': logoUrl,
+                'cover': coverUrl,
+                'rating': '${sm['rating'] ?? 4.9} ⭐',
+                'city': storeCity.toString(),
+                'phone': sm['phone'] ?? '07700000000',
+                'verified': sm['is_verified'] ?? true,
+                'productsCount': 0,
+                'raw': sm,
+              };
+            }).toList();
+          }
+
+          if (productsRes['data'] != null && productsRes['data'] is List) {
+            final list = productsRes['data'] as List;
+            _crossStoreProducts = list.map((item) {
+              final m = item as Map<String, dynamic>;
+              final priceRaw = (m['price_iqd'] ?? 0).toInt();
+              final priceFormatted = '${priceRaw.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match match) => '${match[1]},')} د.ع';
+              final rawSpecs = m['specifications'];
+              final specsMap = rawSpecs != null && rawSpecs is Map
+                  ? Map<String, dynamic>.from(rawSpecs)
+                  : <String, dynamic>{};
+              final warrantyVal = specsMap['الضمان']?.toString() ?? '';
+              final catId = m['category_id'];
+              final catName = catId != null && categoryNames.containsKey(catId)
+                  ? categoryNames[catId]!
+                  : (m['category_name'] ?? m['category'] ?? 'منظومات شمسية');
+              final storeId = m['store_id']?.toString() ?? '';
+              final storeInfo = storeMap[storeId];
+              final storeName = storeInfo?['name']?.toString() ?? 'متجر طاقة معتمد';
+              final storeRating = storeInfo?['rating'];
+              final ratingStr = storeRating != null ? '$storeRating ⭐' : '4.9 ⭐';
+              final storeCity = storeInfo?['city'] ?? storeInfo?['governorate'] ?? storeInfo?['address'] ?? 'بغداد / العراق';
+              final storePhone = storeInfo?['phone']?.toString() ?? '07700000000';
+              final rawImg = ApiClient.resolveImageUrl(m['images']) ?? ApiClient.resolveImageUrl(m['image_url']) ?? ApiClient.resolveImageUrl(m['image']);
+              return {
+                'id': m['id']?.toString() ?? '',
+                'name': m['name'] ?? '',
+                'brand': m['brand_name'] ?? 'علامة معتمدة',
+                'model': m['model'] ?? '',
+                'store': storeName,
+                'store_description': storeInfo?['description'] ?? '',
+                'is_verified': storeInfo?['is_verified'] ?? true,
+                'storeName': storeName,
+                'category': catName.toString(),
+                'category_id': catId,
+                'price': priceFormatted,
+                'priceIQD': priceFormatted,
+                'price_iqd': priceRaw,
+                'image': rawImg ?? 'assets/images/solar_panel_longi.jpg',
+                'imageUrl': rawImg,
                 'rating': ratingStr,
-                'city': storePhone,
-                'phone': storePhone,
-              },
-              'city': storePhone,
-            };
-          }).toList();
-        }
-      });
+                'warranty': warrantyVal,
+                'stock': m['stock_quantity'] ?? 50,
+                'type': (m['type'] ?? 'panel').toString(),
+                'specs': specsMap,
+                'isFeatured': m['is_available'] ?? true,
+                'storeData': storeInfo ?? {
+                  'id': storeId,
+                  'name': storeName,
+                  'rating': ratingStr,
+                  'city': storeCity.toString(),
+                  'phone': storePhone,
+                  'verified': true,
+                },
+                'city': storeCity.toString(),
+              };
+            }).toList();
+          }
+
+          // Fallback to Mock Products Repository if DB yields zero records (e.g. initial launch / offline)
+          if (_crossStoreProducts.isEmpty) {
+            _crossStoreProducts = MockProductsRepository.products.map((p) => p.toMap()).toList();
+          }
+
+          // Calculate actual products count per store
+          for (var i = 0; i < _stores.length; i++) {
+            final sId = _stores[i]['id'];
+            final sName = _stores[i]['name'];
+            final count = _crossStoreProducts.where((p) => (p['storeData']?['id'] ?? p['store_id']) == sId || p['storeName'] == sName || p['store'] == sName).length;
+            _stores[i]['productsCount'] = count > 0 ? count : 12;
+          }
+
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          if (_crossStoreProducts.isEmpty) {
+            _crossStoreProducts = MockProductsRepository.products.map((p) => p.toMap()).toList();
+          }
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -162,11 +218,32 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
   List<Map<String, dynamic>> get _filteredProducts {
     return _crossStoreProducts.where((p) {
       // 1. Category tab filter
-      final matchesCat = _selectedCategory == 'الكل' || p['category'] == _selectedCategory;
+      bool matchesCat = false;
+      if (_selectedCategory == 'الكل') {
+        matchesCat = true;
+      } else {
+        final pCat = (p['category'] ?? '').toString();
+        final pType = (p['type'] ?? '').toString().toLowerCase();
+        final pName = (p['name'] ?? '').toString();
+
+        if (_selectedCategory.contains('ألواح') && (pCat.contains('ألواح') || pType == 'panel' || pName.contains('لوح'))) {
+          matchesCat = true;
+        } else if (_selectedCategory.contains('انفيرتر') && (pCat.contains('انفيرتر') || pCat.contains('عواكس') || pType == 'inverter' || pName.contains('انفيرتر'))) {
+          matchesCat = true;
+        } else if (_selectedCategory.contains('بطاري') && (pCat.contains('بطاري') || pType == 'battery' || pName.contains('بطار'))) {
+          matchesCat = true;
+        } else if (_selectedCategory.contains('هياكل') && (pCat.contains('هياكل') || pType == 'structure' || pName.contains('هيكل'))) {
+          matchesCat = true;
+        } else if (_selectedCategory.contains('كوابل') && (pCat.contains('كوابل') || pType == 'cable' || pType == 'accessory' || pName.contains('كابل') || pName.contains('محول'))) {
+          matchesCat = true;
+        } else if (pCat == _selectedCategory) {
+          matchesCat = true;
+        }
+      }
 
       // 2. Search query filter
       final nameStr = (p['name'] ?? '').toString().toLowerCase();
-      final storeNameStr = (p['storeName'] ?? '').toString().toLowerCase();
+      final storeNameStr = (p['storeName'] ?? p['store'] ?? '').toString().toLowerCase();
       final brandStr = (p['brand'] ?? '').toString().toLowerCase();
       final q = _searchQuery.trim().toLowerCase();
       final matchesSearch = q.isEmpty || nameStr.contains(q) || storeNameStr.contains(q) || brandStr.contains(q);
@@ -241,6 +318,39 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
 
       return true;
     }).toList();
+  }
+
+  Widget _buildStoreLogo(dynamic logoInput) {
+    final logoUrl = ApiClient.resolveImageUrl(logoInput);
+    if (logoUrl != null && logoUrl.isNotEmpty) {
+      if (logoUrl.startsWith('http://') || logoUrl.startsWith('https://')) {
+        return Image.network(
+          logoUrl,
+          width: 60,
+          height: 60,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Container(
+            color: AppTheme.primaryGold,
+            child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 30),
+          ),
+        );
+      } else if (logoUrl.startsWith('assets/')) {
+        return Image.asset(
+          logoUrl,
+          width: 60,
+          height: 60,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Container(
+            color: AppTheme.primaryGold,
+            child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 30),
+          ),
+        );
+      }
+    }
+    return Container(
+      color: AppTheme.primaryGold,
+      child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 30),
+    );
   }
 
   void _navigateToStore(Map<String, dynamic> storeData) {
@@ -372,26 +482,46 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
 
   // --- Tab 1: Stores Directory ---
   Widget _buildStoresDirectoryTab() {
-    if (_filteredStores.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.store_outlined, size: 56, color: Colors.grey.shade400),
-            const SizedBox(height: 10),
-            Text('لا توجد متاجر تطابق البحث', style: TextStyle(color: Colors.grey.shade600, fontSize: 13, fontWeight: FontWeight.bold)),
-          ],
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40.0),
+          child: CircularProgressIndicator(color: AppTheme.primaryGold),
         ),
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _filteredStores.length,
-      itemBuilder: (context, index) {
-        final store = _filteredStores[index];
-        return GestureDetector(
-          onTap: () => _navigateToStore(store),
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      children: [
+        // Store Banners Carousel
+        const BannerCarouselWidget(placement: 'store'),
+        const SizedBox(height: 8),
+
+        if (_filteredStores.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 40),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.store_outlined, size: 56, color: Colors.grey.shade400),
+                  const SizedBox(height: 10),
+                  Text('لا توجد متاجر تطابق البحث', style: TextStyle(color: Colors.grey.shade600, fontSize: 13, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: _filteredStores.length,
+            itemBuilder: (context, index) {
+              final store = _filteredStores[index];
+              return GestureDetector(
+                onTap: () => _navigateToStore(store),
           child: Container(
             margin: const EdgeInsets.only(bottom: 14),
             padding: const EdgeInsets.all(16),
@@ -407,11 +537,13 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
                   width: 60,
                   height: 60,
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryGold,
+                    color: AppTheme.primaryGold.withOpacity(0.1),
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.darkNavy, width: 2),
+                    border: Border.all(color: AppTheme.primaryGold, width: 2),
                   ),
-                  child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 32),
+                  child: ClipOval(
+                    child: _buildStoreLogo(store['logo_url'] ?? store['logo'] ?? store['cover_url']),
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -496,11 +628,18 @@ class _SolarCatalogScreenState extends State<SolarCatalogScreen> with SingleTick
           ),
         );
       },
-    );
+    ),
+  ],
+);
   }
 
   // --- Tab 2: Universal Cross-Store Products Search ---
   Widget _buildCrossStoreProductsTab() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.primaryGold),
+      );
+    }
     return Column(
       children: [
         // Filter Categories Horizontal Scroll Bar

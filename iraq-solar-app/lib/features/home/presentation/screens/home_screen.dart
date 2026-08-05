@@ -107,16 +107,24 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
           }
           _storesList = storesList.map((s) {
             final sm = s as Map<String, dynamic>;
+            final logoUrl = ApiClient.resolveImageUrl(sm['logo_url'] ?? sm['logo']);
+            final coverUrl = ApiClient.resolveImageUrl(sm['cover_url'] ?? sm['cover']);
             return {
               'id': sm['id']?.toString() ?? '',
               'name': sm['name'] ?? 'متجر طاقة متكامل',
+              'description': sm['description'] ?? 'متجر طاقة شمسية معتمد في العراق',
               'fullName': sm['description'] ?? 'متجر طاقة شمسية معتمد في العراق',
+              'logo_url': logoUrl,
+              'cover_url': coverUrl,
+              'logo': logoUrl,
+              'cover': coverUrl,
               'rating': '${sm['rating'] ?? 0} ⭐',
               'city': sm['phone'] ?? '07700000000',
               'verified': sm['is_verified'] ?? true,
               'phone': sm['phone'] ?? '07700000000',
               'icon': Icons.wb_sunny_rounded,
               'color': const Color(0xFFF59E0B),
+              'raw': sm,
             };
           }).toList();
         }
@@ -137,6 +145,7 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
             final storeName = storeInfo?['name']?.toString() ?? 'متجر غير محدد';
             final storeRating = storeInfo?['rating'];
             final ratingStr = storeRating != null ? '$storeRating ⭐' : '—';
+            final rawImg = ApiClient.resolveImageUrl(m['images']) ?? ApiClient.resolveImageUrl(m['image_url']) ?? ApiClient.resolveImageUrl(m['image']);
             return {
               'id': m['id']?.toString() ?? '',
               'name': m['name'] ?? '',
@@ -149,7 +158,8 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
               'price': priceFormatted,
               'priceIQD': priceFormatted,
               'price_iqd': priceRaw,
-              'image': 'assets/images/solar_panel_longi.jpg',
+              'image': rawImg ?? 'assets/images/solar_panel_longi.jpg',
+              'imageUrl': rawImg,
               'rating': ratingStr,
               'warranty': warrantyVal,
               'stock': m['stock_quantity'] ?? 50,
@@ -674,9 +684,19 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
                               shape: BoxShape.circle,
                               border: Border.all(color: color, width: 1.5),
                             ),
-                            child: Center(
-                              child: Icon(icon, color: color, size: 26),
-                            ),
+                            child: store['logo_url'] != null && (store['logo_url'] as String).isNotEmpty
+                                ? ClipOval(
+                                    child: Image.network(
+                                      store['logo_url'] as String,
+                                      width: 50,
+                                      height: 50,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => Center(child: Icon(icon, color: color, size: 26)),
+                                    ),
+                                  )
+                                : Center(
+                                    child: Icon(icon, color: color, size: 26),
+                                  ),
                           ),
                           if (store['verified'] == true)
                             Positioned(

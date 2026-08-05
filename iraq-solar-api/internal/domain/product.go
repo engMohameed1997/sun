@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 type ProductType string
@@ -34,7 +35,7 @@ type Product struct {
 	ReservedQuantity  int             `db:"reserved_quantity" json:"reserved_quantity"`
 	LowStockThreshold int             `db:"low_stock_threshold" json:"low_stock_threshold"`
 	Specifications    json.RawMessage `db:"specifications" json:"specifications"`
-	Images            []string        `db:"images" json:"images"`
+	Images            pq.StringArray  `db:"images" json:"images"`
 	IsAvailable       bool            `db:"is_available" json:"is_available"`
 	CreatedAt         time.Time       `db:"created_at" json:"created_at"`
 	UpdatedAt         time.Time       `db:"updated_at" json:"updated_at"`

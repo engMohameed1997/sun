@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import '../services/auth_storage.dart';
 
@@ -11,6 +13,46 @@ class ApiClient {
       return 'http://10.0.2.2:8080/api/v1';
     }
     return 'http://localhost:8080/api/v1';
+  }
+
+  static String? resolveImageUrl(dynamic input) {
+    if (input == null) return null;
+    if (input is List && input.isNotEmpty) {
+      return resolveImageUrl(input.first);
+    }
+    if (input is String && input.trim().isNotEmpty) {
+      var str = input.trim();
+      final currentUri = Uri.tryParse(baseUrl);
+      final currentHost = currentUri?.host ?? (!kIsWeb && Platform.isAndroid ? '10.0.2.2' : 'localhost');
+
+      if (currentHost != 'localhost' && currentHost != '127.0.0.1') {
+        str = str.replaceAll('://localhost:', '://$currentHost:');
+        str = str.replaceAll('://127.0.0.1:', '://$currentHost:');
+        str = str.replaceAll('://localhost/', '://$currentHost/');
+        str = str.replaceAll('://127.0.0.1/', '://$currentHost/');
+      }
+
+      if (str.startsWith('http://') || str.startsWith('https://')) {
+        return str;
+      }
+      if (str.startsWith('assets/')) {
+        return str;
+      }
+      final host = baseUrl.replaceAll('/api/v1', '');
+      return str.startsWith('/') ? '$host$str' : '$host/$str';
+    }
+    return null;
+  }
+
+  // Helper for persistent device ID
+  static Future<String> getDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? deviceId = prefs.getString('app_device_id');
+    if (deviceId == null || deviceId.isEmpty) {
+      deviceId = const Uuid().v4();
+      await prefs.setString('app_device_id', deviceId);
+    }
+    return deviceId;
   }
 
   static Future<Map<String, String>> headersAsync([String? token]) async {
@@ -674,16 +716,79 @@ class ApiClient {
     }
   }
 
-  // 15. Live Banners List
-  static Future<Map<String, dynamic>> getBanners() async {
+  // 15. Live Banners List (with query parameters & SharedPreferences per-user local offline cache)
+  static Future<Map<String, dynamic>> getBanners({
+    String placement = 'home',
+    String? storeId,
+    String? categoryId,
+    String? productId,
+  }) async {
+    final user = await AuthStorageService.getUser();
+    final userId = user?['id']?.toString();
+    final userPrefix = (userId != null && userId.isNotEmpty) ? 'user_$userId' : 'guest';
+    final cacheKey = 'cached_banners_${userPrefix}_${placement}_${storeId ?? ""}_${categoryId ?? ""}_${productId ?? ""}';
+
     try {
-      final response = await http.get(Uri.parse('$baseUrl/banners'), headers: headers());
+      final prefs = await SharedPreferences.getInstance();
+
+      final queryParams = <String, String>{
+        'placement': placement,
+      };
+      if (storeId != null && storeId.isNotEmpty) queryParams['store_id'] = storeId;
+      if (categoryId != null && categoryId.isNotEmpty) queryParams['category_id'] = categoryId;
+      if (productId != null && productId.isNotEmpty) queryParams['product_id'] = productId;
+
+      final uri = Uri.parse('$baseUrl/banners').replace(queryParameters: queryParams);
+      final reqHeaders = await headersAsync();
+      final response = await http.get(uri, headers: reqHeaders);
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final decoded = jsonDecode(response.body);
+        if (decoded['success'] == true) {
+          final cacheData = {
+            'cached_at': DateTime.now().millisecondsSinceEpoch,
+            'response': decoded,
+          };
+          await prefs.setString(cacheKey, jsonEncode(cacheData));
+        }
+        return decoded;
       }
-      return {'success': false, 'message': 'فشل جلب إعلانات البنرات'};
-    } catch (e) {
-      return {'success': false, 'message': 'خطأ في الاتصال بالسيرفر: $e'};
+    } catch (_) {}
+
+    // Fallback to local SharedPreferences cache if offline/error
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedStr = prefs.getString(cacheKey);
+      if (cachedStr != null && cachedStr.isNotEmpty) {
+        final cachedObj = jsonDecode(cachedStr);
+        if (cachedObj is Map && cachedObj['response'] != null) {
+          return Map<String, dynamic>.from(cachedObj['response'] as Map);
+        }
+        return jsonDecode(cachedStr);
+      }
+    } catch (_) {}
+
+    return {'success': false, 'message': 'فشل جلب إعلانات البنرات'};
+  }
+
+  // 15b. Track Banner Event (impression or click)
+  static Future<bool> trackBannerEvent(String bannerId, String eventType, {Map<String, dynamic>? metadata}) async {
+    try {
+      final deviceId = await getDeviceId();
+      final body = <String, dynamic>{
+        'event_type': eventType,
+        'device_id': deviceId,
+      };
+      if (metadata != null) body['metadata'] = metadata;
+
+      final reqHeaders = await headersAsync();
+      final response = await http.post(
+        Uri.parse('$baseUrl/banners/$bannerId/track'),
+        headers: reqHeaders,
+        body: jsonEncode(body),
+      );
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
     }
   }
 

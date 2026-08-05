@@ -136,15 +136,21 @@ export const ProductsPage: React.FC = () => {
     if (!e.target.files?.[0]) return;
     setUploadingImage(true);
     const formData = new FormData();
-    formData.append('file', e.target.files[0]);
+    formData.append('image', e.target.files[0]);
 
     try {
-      const res = await api.post('/upload', formData, {
+      const res = await api.post('/upload/image', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setImageUrl(res.data?.data?.url || '');
-    } catch (err) {
-      alert('فشل رفع الصورة');
+      const url = res.data?.data?.url || res.data?.url;
+      if (url) {
+        setImageUrl(url);
+      } else {
+        alert('لم يتم استرجاع رابط الصورة المرفوعة');
+      }
+    } catch (err: any) {
+      console.error('Upload image error:', err);
+      alert('فشل رفع الصورة: ' + (err.response?.data?.error || err.response?.data?.message || err.message));
     } finally {
       setUploadingImage(false);
     }

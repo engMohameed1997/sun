@@ -241,14 +241,37 @@ export interface Governorate {
   is_active: boolean;
 }
 
+export type BannerActionType = 'none' | 'open_store' | 'open_product' | 'open_category' | 'open_search' | 'open_url';
+
+export interface BannerStoreTarget {
+  store_id?: string;
+  branch_id?: string;
+}
+
 export interface HomeBanner {
   id: string;
-  title?: string;
-  subtitle?: string;
   image_url: string;
-  link_url?: string;
+  mobile_image_url?: string;
+  priority: number;
   display_order: number;
   is_active: boolean;
+  starts_at?: string;
+  ends_at?: string;
+  action_type: BannerActionType;
+  action_payload?: Record<string, any>;
+  targeting_rules?: Record<string, any>;
+  recurrence_type?: 'none' | 'daily' | 'weekly' | 'monthly';
+  recurrence_time?: string;
+  recurrence_end?: string;
+  timezone?: string;
+  created_by?: string;
+  merchant_id?: string;
+  placements?: string[];
+  store_ids?: string[];
+  branch_ids?: string[];
+  store_targets?: BannerStoreTarget[];
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface DashboardStats {

@@ -53,10 +53,23 @@ class AuthStorageService {
     return true;
   }
 
+  static Future<void> clearBannerCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys();
+      for (final key in keys) {
+        if (key.startsWith('cached_banners_')) {
+          await prefs.remove(key);
+        }
+      }
+    } catch (_) {}
+  }
+
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyToken);
     await prefs.remove(_keyRefreshToken);
     await prefs.remove(_keyUserData);
+    await clearBannerCache();
   }
 }
