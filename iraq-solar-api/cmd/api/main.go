@@ -48,12 +48,14 @@ func main() {
 	categoryRepo := repository.NewCategoryRepository(db)
 	brandRepo := repository.NewBrandRepository(db)
 	calcRepo := repository.NewSolarCalculationRepository(db)
+	calcMgmtRepo := repository.NewCalculatorManagementRepository(db)
 	orderRepo := repository.NewOrderRepository(db)
 	adminRepo := repository.NewAdminRepository(db)
 	governorateRepo := repository.NewGovernorateRepository(db)
 	bannerRepo := repository.NewBannerRepository(db)
 	notificationRepo := repository.NewNotificationRepository(db)
 	ticketRepo := repository.NewSupportTicketRepository(db)
+	workforceRepo := repository.NewWorkforceRepository(db)
 
 	// 4. Initialize WebSocket Hub (RealtimeHub — handles all realtime connections)
 	realtimeHub := hub.NewRealtimeHub()
@@ -70,6 +72,9 @@ func main() {
 	adminService := service.NewAdminService(adminRepo, governorateRepo, notificationRepo)
 	ticketService := service.NewSupportTicketService(ticketRepo)
 	bannerService := service.NewBannerService(bannerRepo, redisCache, cfg.RedisBannerCacheTTL)
+	workforceService := service.NewWorkforceService(workforceRepo, userRepo)
+	dispatchService := service.NewDispatchService(workforceRepo, workforceService, realtimeHub, notificationService)
+	dispatchService.StartDispatchExpiryCron(context.Background(), time.Minute)
 
 	minioService, minioErr := service.NewMinIOService(cfg.MinIOEndpoint, cfg.MinIOPublicEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey, cfg.MinIOBucket, cfg.MinIOUseSSL)
 	if minioErr != nil {
@@ -78,10 +83,16 @@ func main() {
 		_ = minioService.InitBucket(context.Background())
 	}
 
+	// Initialize Real Data Repositories & Solar Engine
+	solarRepo, presetRepo, indexRepo := repository.NewCalculatorRealDataRepository(db)
+	catalogService := service.NewCatalogService(productRepo, storeRepo)
+	recService := service.NewRecommendationService(catalogService)
+	calcEngine := service.NewSolarCalculatorEngine(solarRepo, indexRepo, presetRepo, recService)
+
 	// 5. Initialize Handlers
 	storeHandler := handler.NewStoreHandler(storeService)
 	authHandler := handler.NewAuthHandler(authService)
-	calcHandler := handler.NewCalculatorHandler(calcService)
+	calcHandler := handler.NewCalculatorHandler(calcService, calcMgmtRepo, calcEngine, solarRepo, presetRepo)
 	productHandler := handler.NewProductHandler(productRepo, storeRepo, categoryRepo)
 	brandHandler := handler.NewBrandHandler(brandRepo)
 	orderHandler := handler.NewOrderHandler(orderService)
@@ -93,6 +104,7 @@ func main() {
 	profileHandler := handler.NewProfileHandler(userRepo)
 	ticketHandler := handler.NewSupportTicketHandler(ticketService)
 	bannerHandler := handler.NewBannerHandler(bannerService)
+	workforceHandler := handler.NewWorkforceHandler(workforceRepo, workforceService, dispatchService)
 
 	// 6. Setup Gin Router & Global Security Middlewares
 	if cfg.Environment == "production" {
@@ -142,6 +154,8 @@ func main() {
 		// Solar System Sizing & Specialized Calculators
 		calcGroup := v1.Group("/calculator")
 		{
+			calcGroup.GET("/appliances", calcHandler.GetAppliancePresets)
+			calcGroup.GET("/governorates-solar", calcHandler.GetGovernorateSolarData)
 			calcGroup.POST("/estimate", calcHandler.EstimateSystem)
 			calcGroup.POST("/roi", calcHandler.CalculateROI)
 			calcGroup.POST("/battery-runtime", calcHandler.CalculateBatteryRuntime)
@@ -159,6 +173,7 @@ func main() {
 				techGroup.POST("/solar-production", calcHandler.CalculateSolarProduction)
 			}
 		}
+		v1.GET("/calculators", middleware.OptionalAuthMiddleware(authService), calcHandler.GetActiveCalculators)
 
 		// Categories & Public Store Routes
 		v1.GET("/categories", productHandler.ListCategories)
@@ -175,6 +190,11 @@ func main() {
 		// Public Installers/Engineers Directory
 		v1.GET("/installers", installerHandler.ListInstallers)
 		v1.GET("/installers/:id", installerHandler.GetInstallerDetail)
+
+		// Public Technicians Directory (trust gallery — no phone numbers exposed)
+		v1.GET("/technicians", workforceHandler.ListPublicTechnicians)
+		v1.GET("/technicians/:id", workforceHandler.GetPublicTechnician)
+		v1.GET("/technicians/:id/portfolio", workforceHandler.GetTechnicianPortfolio)
 
 		// Products Catalog Routes
 		productGroup := v1.Group("/products")
@@ -232,6 +252,43 @@ func main() {
 				utils.SuccessResponse(c, http.StatusOK, "تم شحن المحفظة بنجاح", gin.H{"new_balance_iqd": 2000000.00})
 			})
 
+			// --- Workforce: Customer Service Orders ---
+			serviceOrders := protected.Group("/service-orders")
+			{
+				serviceOrders.POST("", workforceHandler.CreateServiceOrder)
+				serviceOrders.POST("/from-calculator", workforceHandler.CreateServiceOrderFromCalculator)
+				serviceOrders.GET("", workforceHandler.ListMyServiceOrders)
+				serviceOrders.GET("/:id", workforceHandler.GetMyServiceOrder)
+				serviceOrders.POST("/:id/review", workforceHandler.SubmitOrderReview)
+			}
+
+			// --- Workforce: Technician Workspace ---
+			technicianGroup := protected.Group("/technician")
+			technicianGroup.Use(middleware.RequireRole(domain.RoleInstaller, domain.RoleEngineer, domain.RoleAdmin))
+			{
+				technicianGroup.GET("/profile", workforceHandler.GetMyTechnicianProfile)
+				technicianGroup.PUT("/availability", workforceHandler.UpdateMyAvailability)
+				technicianGroup.PUT("/zones", workforceHandler.UpdateMyServiceZones)
+				technicianGroup.POST("/documents", workforceHandler.AddMyDocument)
+				technicianGroup.POST("/portfolio", workforceHandler.AddMyPortfolioItem)
+				technicianGroup.GET("/wallet", workforceHandler.GetMyWallet)
+
+				technicianGroup.GET("/dispatch-queue", workforceHandler.GetMyDispatchQueue)
+				technicianGroup.POST("/dispatch/:id/accept", workforceHandler.AcceptDispatch)
+				technicianGroup.POST("/dispatch/:id/reject", workforceHandler.RejectDispatch)
+
+				technicianGroup.GET("/assignments", workforceHandler.ListMyAssignments)
+				technicianGroup.GET("/orders/:id", workforceHandler.GetMyAssignmentDetail)
+				technicianGroup.POST("/orders/:id/status", workforceHandler.UpdateJobStatus)
+				technicianGroup.POST("/orders/:id/media", workforceHandler.AddJobMedia)
+				technicianGroup.POST("/orders/:id/tasks/:task_id/toggle", workforceHandler.ToggleJobTask)
+				technicianGroup.POST("/orders/:id/customer-unavailable", workforceHandler.MarkCustomerUnavailable)
+				technicianGroup.POST("/orders/:id/tracking", workforceHandler.UpdateTracking)
+
+				technicianGroup.POST("/leads", workforceHandler.CreateLead)
+				technicianGroup.GET("/leads", workforceHandler.ListMyLeads)
+			}
+
 			// Merchant Product Management Routes
 			merchantGroup := protected.Group("/merchant/products")
 			merchantGroup.Use(middleware.RequirePermission(domain.PermProductsOwn))
@@ -257,6 +314,16 @@ func main() {
 			adminProducts.Use(middleware.RequireRole(domain.RoleAdmin, domain.RoleMerchant))
 			{
 				adminProducts.POST("", productHandler.CreateProduct)
+			}
+
+			// Admin Calculator Management Routes
+			adminCalcGroup := protected.Group("/admin/calculators")
+			adminCalcGroup.Use(middleware.RequireRole(domain.RoleAdmin))
+			{
+				adminCalcGroup.GET("", calcHandler.ListAdminCalculators)
+				adminCalcGroup.POST("", calcHandler.CreateAdminCalculator)
+				adminCalcGroup.PUT("/:id", calcHandler.UpdateAdminCalculator)
+				adminCalcGroup.PATCH("/:id/status", calcHandler.PatchAdminCalculatorStatus)
 			}
 
 			// Image Upload Routes
@@ -344,6 +411,47 @@ func main() {
 				adminOnly.DELETE("/banners/:id", bannerHandler.DeleteBanner)
 				adminOnly.PUT("/banners/reorder", bannerHandler.ReorderBanners)
 				adminOnly.GET("/banners/:id/analytics", bannerHandler.GetBannerAnalytics)
+
+				// --- Workforce: Technicians Management ---
+				adminOnly.GET("/technicians", workforceHandler.AdminListTechnicians)
+				adminOnly.POST("/technicians", workforceHandler.AdminCreateTechnician)
+				adminOnly.GET("/technicians/:id", workforceHandler.AdminGetTechnician)
+				adminOnly.PUT("/technicians/:id", workforceHandler.AdminUpdateTechnician)
+				adminOnly.PUT("/technicians/:id/verify", workforceHandler.AdminVerifyTechnician)
+				adminOnly.PUT("/technicians/:id/ranking", workforceHandler.AdminUpdateRanking)
+				adminOnly.PUT("/technicians/:id/zones", workforceHandler.AdminUpdateServiceZones)
+				adminOnly.PUT("/technicians/:id/documents/:doc_id", workforceHandler.AdminReviewDocument)
+				adminOnly.GET("/technicians/:id/wallet", workforceHandler.AdminGetTechnicianWallet)
+				adminOnly.POST("/technicians/:id/wallet/settle", workforceHandler.AdminSettleWallet)
+
+				// --- Workforce: Technician Levels ---
+				adminOnly.GET("/technician-levels", workforceHandler.ListTechnicianLevels)
+				adminOnly.POST("/technician-levels", workforceHandler.CreateTechnicianLevel)
+				adminOnly.PUT("/technician-levels/:id", workforceHandler.UpdateTechnicianLevel)
+
+				// --- Workforce: Service Orders & Dispatch ---
+				adminOnly.GET("/service-orders", workforceHandler.AdminListServiceOrders)
+				adminOnly.GET("/service-orders/:id", workforceHandler.AdminGetServiceOrder)
+				adminOnly.GET("/service-orders/:id/dispatch-queue", workforceHandler.AdminGetDispatchQueue)
+				adminOnly.PUT("/service-orders/:id/assign", workforceHandler.AdminAssignTechnician)
+				adminOnly.POST("/service-orders/:id/redispatch", workforceHandler.AdminRedispatchOrder)
+				adminOnly.PUT("/service-orders/:id/status", workforceHandler.AdminUpdateServiceOrderStatus)
+				adminOnly.PUT("/service-orders/:id/pricing", workforceHandler.AdminSetPricing)
+				adminOnly.PUT("/service-orders/:id/payment-status", workforceHandler.AdminUpdatePaymentStatus)
+
+				// --- Workforce: Dispatch Settings & Analytics ---
+				adminOnly.GET("/dispatch-settings", workforceHandler.ListDispatchSettings)
+				adminOnly.PUT("/dispatch-settings", workforceHandler.UpsertDispatchSettings)
+				adminOnly.GET("/dispatch-stats", workforceHandler.AdminDispatchStats)
+
+				// --- Workforce: Pricing ---
+				adminOnly.GET("/service-pricing", workforceHandler.AdminListPricing)
+				adminOnly.GET("/service-price-tiers", workforceHandler.AdminListPriceTiers)
+
+				// --- Workforce: Technician Leads ---
+				adminOnly.GET("/leads", workforceHandler.AdminListLeads)
+				adminOnly.PUT("/leads/:id/approve", workforceHandler.AdminApproveLead)
+				adminOnly.PUT("/leads/:id/reject", workforceHandler.AdminRejectLead)
 
 				// Audit Logs & Settings
 				adminOnly.GET("/audit-logs", adminHandler.ListAuditLogs)

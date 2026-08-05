@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../workforce/customer/create_service_order_screen.dart';
 import 'installer_detail_screen.dart';
 
 class SolarInstallersScreen extends StatefulWidget {
@@ -90,6 +91,22 @@ class _SolarInstallersScreenState extends State<SolarInstallersScreen> {
         appBar: AppBar(
           title: const Text('دليل المهندسين والفنيين المعتمدين في العراق'),
           backgroundColor: AppTheme.darkNavy,
+        ),
+        floatingActionButton: Padding(
+          padding: const EdgeInsets.only(bottom: 70),
+          child: FloatingActionButton.extended(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CreateServiceOrderScreen(),
+                ),
+              );
+            },
+            backgroundColor: AppTheme.darkNavy,
+            icon: const Icon(Icons.build_circle_rounded, color: AppTheme.primaryGold),
+            label: const Text('اطلب خدمة شمسية (توزيع تلقائي)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
         ),
         body: Column(
           children: [

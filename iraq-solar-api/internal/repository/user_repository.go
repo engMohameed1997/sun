@@ -92,40 +92,49 @@ func (r *postgresUserRepository) ListByRole(ctx context.Context, roles []string,
 	var args []interface{}
 	argID := 1
 
+	hasInstallerRole := false
 	if len(roles) > 0 {
 		var rolePlaceholders []string
 		for _, role := range roles {
+			if role == "installer" || role == "engineer" || role == "technician" {
+				hasInstallerRole = true
+			}
 			rolePlaceholders = append(rolePlaceholders, fmt.Sprintf("$%d", argID))
 			args = append(args, role)
 			argID++
 		}
-		conditions = append(conditions, fmt.Sprintf("role IN (%s)", strings.Join(rolePlaceholders, ", ")))
+		conditions = append(conditions, fmt.Sprintf("u.role IN (%s)", strings.Join(rolePlaceholders, ", ")))
 	}
 
-	conditions = append(conditions, "deleted_at IS NULL", "is_active = true")
+	conditions = append(conditions, "u.deleted_at IS NULL", "u.is_active = true")
+
+	joinClause := ""
+	if hasInstallerRole {
+		joinClause = "INNER JOIN technicians t ON t.user_id = u.id AND t.is_verified = true"
+	}
 
 	if governorate != "" {
-		conditions = append(conditions, fmt.Sprintf("governorate = $%d", argID))
+		conditions = append(conditions, fmt.Sprintf("u.governorate = $%d", argID))
 		args = append(args, governorate)
 		argID++
 	}
 
 	if search != "" {
-		conditions = append(conditions, fmt.Sprintf("full_name ILIKE $%d", argID))
+		conditions = append(conditions, fmt.Sprintf("u.full_name ILIKE $%d", argID))
 		args = append(args, "%"+search+"%")
 		argID++
 	}
 
 	whereClause := "WHERE " + strings.Join(conditions, " AND ")
 
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM users %s", whereClause)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM users u %s %s", joinClause, whereClause)
 	var total int
 	if err := r.db.GetContext(ctx, &total, countQuery, args...); err != nil {
 		return nil, 0, fmt.Errorf("failed to count users: %w", err)
 	}
 
 	offset := (page - 1) * perPage
-	query := fmt.Sprintf(`SELECT id, full_name, COALESCE(phone, '') AS phone, password_hash, role, COALESCE(governorate, '') AS governorate, COALESCE(city, '') AS city, is_active, created_at, updated_at FROM users %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, whereClause, argID, argID+1)
+	query := fmt.Sprintf(`SELECT u.id, u.full_name, COALESCE(u.phone, '') AS phone, u.password_hash, u.role, COALESCE(u.governorate, '') AS governorate, COALESCE(u.city, '') AS city, u.is_active, u.created_at, u.updated_at FROM users u %s %s ORDER BY u.created_at DESC LIMIT $%d OFFSET $%d`, joinClause, whereClause, argID, argID+1)
 	args = append(args, perPage, offset)
 
 	var users []domain.User

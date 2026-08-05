@@ -12,12 +12,18 @@ import {
   MapPin,
   ShieldCheck,
   Settings,
+  Calculator,
   LogOut,
   Bell,
   Sun,
   Menu,
   X,
-  AlertTriangle
+  AlertTriangle,
+  HardHat,
+  ClipboardList,
+  SlidersHorizontal,
+  UserPlus,
+  Coins
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -101,10 +107,46 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       perm: 'banners.manage' as const,
     },
     {
+      label: 'إدارة الحاسبات',
+      path: '/calculators',
+      icon: Calculator,
+      perm: 'settings.manage' as const,
+    },
+    {
       label: 'المحافظات',
       path: '/governorates',
       icon: MapPin,
       perm: 'banners.manage' as const,
+    },
+    {
+      label: 'الفنيون والمهندسون',
+      path: '/technicians',
+      icon: HardHat,
+      perm: 'users.manage' as const,
+    },
+    {
+      label: 'الطلبات الخدمية',
+      path: '/service-orders',
+      icon: ClipboardList,
+      perm: 'orders.manage' as const,
+    },
+    {
+      label: 'إعدادات التوزيع',
+      path: '/dispatch-settings',
+      icon: SlidersHorizontal,
+      perm: 'settings.manage' as const,
+    },
+    {
+      label: 'طلبات الفنيين',
+      path: '/technician-leads',
+      icon: UserPlus,
+      perm: 'orders.manage' as const,
+    },
+    {
+      label: 'التسعير والعمولات',
+      path: '/pricing',
+      icon: Coins,
+      perm: 'settings.manage' as const,
     },
     {
       label: 'سجل التدقيق والأمان',

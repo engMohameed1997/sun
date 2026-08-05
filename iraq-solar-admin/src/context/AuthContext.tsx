@@ -44,7 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (token && !user) {
       api.get('/user/profile')
         .then((res) => {
-          const u = res.data;
+          const u = res.data.data;
           setUser(u);
           localStorage.setItem('iraq_solar_user', JSON.stringify(u));
         })

@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/services/auth_storage.dart';
 import '../../../../core/services/websocket_service.dart';
+import '../../../workforce/technician/technician_dashboard_screen.dart';
 import 'home_screen.dart';
 import '../../../calculator/presentation/screens/calculator_screen.dart';
 import '../../../products/presentation/screens/catalog_screen.dart';
@@ -21,10 +23,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   late int _currentIndex;
   StreamSubscription<WSMessage>? _wsSub;
 
+  /// Roles that get the technician workspace instead of the customer shell.
+  static const Set<String> _technicianRoles = {'installer', 'engineer'};
+
+  bool _isResolvingRole = true;
+  bool _isTechnician = false;
+
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    _resolveRole();
 
     // Listen for incoming notifications & order status changes and show SnackBar
     _wsSub = WebSocketService.instance.messageStream.listen((msg) {
@@ -102,6 +111,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
   }
 
+  /// Reads the cached user role to decide which shell to render.
+  Future<void> _resolveRole() async {
+    final user = await AuthStorageService.getUser();
+    if (!mounted) return;
+    setState(() {
+      _isTechnician = _technicianRoles.contains(user?['role']?.toString());
+      _isResolvingRole = false;
+    });
+  }
+
   @override
   void dispose() {
     _wsSub?.cancel();
@@ -116,6 +135,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isResolvingRole) {
+      return const Scaffold(
+        backgroundColor: AppTheme.backgroundLight,
+        body: Center(child: CircularProgressIndicator(color: AppTheme.primaryGold)),
+      );
+    }
+
+    if (_isTechnician) {
+      return const TechnicianDashboardScreen();
+    }
+
     final List<Widget> screens = [
       SuperQiHomeScreen(
         onNavigateTab: _onTabSelect,

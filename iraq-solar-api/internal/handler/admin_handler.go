@@ -120,12 +120,15 @@ func (h *AdminHandler) GetUser(c *gin.Context) {
 }
 
 type CreateUserByAdminReq struct {
-	FullName    string      `json:"full_name" binding:"required,min=3"`
-	Phone       string      `json:"phone" binding:"required"`
-	Password    string      `json:"password" binding:"required,min=6"`
-	Role        domain.Role `json:"role" binding:"required"`
-	Governorate string      `json:"governorate"`
-	City        string      `json:"city"`
+	FullName      string      `json:"full_name" binding:"required,min=3"`
+	Phone         string      `json:"phone" binding:"required"`
+	Password      string      `json:"password" binding:"required,min=6"`
+	Role          domain.Role `json:"role" binding:"required"`
+	Governorate   string      `json:"governorate"`
+	City          string      `json:"city"`
+	Landmark      string      `json:"landmark"`
+	GovernorateID *int        `json:"governorate_id"`
+	DistrictID    *int        `json:"district_id"`
 }
 
 func (h *AdminHandler) CreateUser(c *gin.Context) {
@@ -141,7 +144,7 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 	}
 
 	adminID := h.getAdminID(c)
-	user, err := h.adminService.CreateUserByAdmin(c.Request.Context(), adminID, req.FullName, req.Phone, req.Password, req.Role, req.Governorate, req.City)
+	user, err := h.adminService.CreateUserByAdmin(c.Request.Context(), adminID, req.FullName, req.Phone, req.Password, req.Role, req.Governorate, req.City, req.Landmark, req.GovernorateID, req.DistrictID)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "unique constraint") {
 			utils.BadRequestError(c, "رقم الهاتف مستخدم بالفعل", err)
@@ -283,6 +286,9 @@ func (h *AdminHandler) CreateStore(c *gin.Context) {
 		domain.RoleMerchant,
 		req.Governorate,
 		req.City,
+		"",
+		nil,
+		nil,
 	)
 	if err != nil {
 		utils.BadRequestError(c, "فشل إنشاء المتجر", err)

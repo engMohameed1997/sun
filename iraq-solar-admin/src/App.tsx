@@ -11,11 +11,17 @@ import { ProductsPage } from './pages/ProductsPage';
 import { StoresPage } from './pages/StoresPage';
 import { UsersPage } from './pages/UsersPage';
 import { BannersPage } from './pages/BannersPage';
+import { CalculatorsPage } from './pages/CalculatorsPage';
 import { GovernoratesPage } from './pages/GovernoratesPage';
 import { CategoriesPage } from './pages/CategoriesPage';
 import { BrandsPage } from './pages/BrandsPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { TechniciansPage } from './pages/TechniciansPage';
+import { ServiceOrdersPage } from './pages/ServiceOrdersPage';
+import { PricingPage } from './pages/PricingPage';
+import { TechnicianLeadsPage } from './pages/TechnicianLeadsPage';
+import { DispatchSettingsPage } from './pages/DispatchSettingsPage';
 
 const queryClient = new QueryClient();
 
@@ -110,10 +116,58 @@ export function App() {
               }
             />
             <Route
+              path="/calculators"
+              element={
+                <ProtectedRoute>
+                  <CalculatorsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/governorates"
               element={
                 <ProtectedRoute>
                   <GovernoratesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/technicians"
+              element={
+                <ProtectedRoute>
+                  <TechniciansPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/service-orders"
+              element={
+                <ProtectedRoute>
+                  <ServiceOrdersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dispatch-settings"
+              element={
+                <ProtectedRoute>
+                  <DispatchSettingsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/technician-leads"
+              element={
+                <ProtectedRoute>
+                  <TechnicianLeadsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/pricing"
+              element={
+                <ProtectedRoute>
+                  <PricingPage />
                 </ProtectedRoute>
               }
             />

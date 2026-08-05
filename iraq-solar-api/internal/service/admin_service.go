@@ -63,7 +63,7 @@ func (s *AdminService) GetUser(ctx context.Context, id uuid.UUID) (*domain.User,
 	return s.adminRepo.GetUserByID(ctx, id)
 }
 
-func (s *AdminService) CreateUserByAdmin(ctx context.Context, adminID uuid.UUID, fullName, phone, password string, role domain.Role, governorate, city string) (*domain.User, error) {
+func (s *AdminService) CreateUserByAdmin(ctx context.Context, adminID uuid.UUID, fullName, phone, password string, role domain.Role, governorate, city, landmark string, governorateID, districtID *int) (*domain.User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -72,16 +72,19 @@ func (s *AdminService) CreateUserByAdmin(ctx context.Context, adminID uuid.UUID,
 	userID := uuid.New()
 
 	user := &domain.User{
-		ID:           userID,
-		FullName:     fullName,
-		Phone:        phone,
-		PasswordHash: string(hashedPassword),
-		Role:         role,
-		Governorate:  governorate,
-		City:         city,
-		IsActive:     true,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		ID:            userID,
+		FullName:      fullName,
+		Phone:         phone,
+		PasswordHash:  string(hashedPassword),
+		Role:          role,
+		Governorate:   governorate,
+		City:          city,
+		Landmark:      landmark,
+		GovernorateID: governorateID,
+		DistrictID:    districtID,
+		IsActive:      true,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 
 	if err := s.adminRepo.CreateUserByAdmin(ctx, user); err != nil {

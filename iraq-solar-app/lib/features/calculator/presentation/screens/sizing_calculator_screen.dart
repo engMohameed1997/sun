@@ -4,6 +4,7 @@ import '../../../../core/services/auth_guard.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../products/presentation/screens/catalog_screen.dart';
+import '../../../workforce/customer/create_service_order_screen.dart';
 
 class SizingCalculatorScreen extends StatefulWidget {
   const SizingCalculatorScreen({Key? key}) : super(key: key);
@@ -221,11 +222,37 @@ class _SizingCalculatorScreenState extends State<SizingCalculatorScreen> {
           const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CreateServiceOrderScreen(
+                    initialOrderType: 'installation',
+                    systemSizeKw: (data['system_size_kw'] as num?)?.toDouble(),
+                    calculatorResult: data,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.engineering_rounded, color: Colors.white),
+            label: const Text('⚡ اطلب فني معتمد للتركيب (توزيع تلقائي)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.darkNavy,
+              minimumSize: const Size.fromHeight(50),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const SolarCatalogScreen()));
             },
-            icon: const Icon(Icons.shopping_cart_rounded, color: Colors.white),
-            label: const Text('🛒 تصفح المتاجر والمنتجات المتوفرة للمنظومة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.darkNavy, minimumSize: const Size.fromHeight(50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+            icon: const Icon(Icons.shopping_cart_rounded, color: AppTheme.darkNavy),
+            label: const Text('🛒 تصفح المتاجر والمنتجات المتوفرة للمنظومة', style: TextStyle(color: AppTheme.darkNavy, fontWeight: FontWeight.bold, fontSize: 14)),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              side: const BorderSide(color: AppTheme.darkNavy),
+            ),
           ),
         ],
       ),

@@ -14,8 +14,11 @@ export const UsersPage: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('engineer');
-  const [governorate] = useState('بغداد');
-  const [city] = useState('');
+  const [governorates, setGovernorates] = useState<any[]>([]);
+  const [selectedGovId, setSelectedGovId] = useState<number | null>(null);
+  const [governorateName, setGovernorateName] = useState('بغداد');
+  const [city, setCity] = useState('');
+  const [landmark, setLandmark] = useState('');
 
   const fetchUsers = async () => {
     try {
@@ -31,6 +34,10 @@ export const UsersPage: React.FC = () => {
   useEffect(() => {
     fetchUsers();
   }, [roleFilter]);
+
+  useEffect(() => {
+    api.get('/admin/governorates').then((res) => setGovernorates(res.data?.data || [])).catch(() => {});
+  }, []);
 
   const handleToggleActive = async (id: string, currentActive: boolean) => {
     try {
@@ -49,10 +56,17 @@ export const UsersPage: React.FC = () => {
         phone,
         password,
         role,
-        governorate,
+        governorate: governorateName,
+        governorate_id: selectedGovId,
         city,
+        landmark,
       });
       setIsModalOpen(false);
+      setFullName('');
+      setPhone('');
+      setPassword('');
+      setCity('');
+      setLandmark('');
       fetchUsers();
     } catch (err: any) {
       const msg = err.response?.data?.message || err.response?.data?.error || 'فشل إضافة المستخدم';
@@ -152,66 +166,119 @@ export const UsersPage: React.FC = () => {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 text-xs">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 text-xs my-8">
             <h3 className="text-lg font-bold text-slate-100">إضافة حساب مستخدم جديد</h3>
             <form onSubmit={handleCreateUser} className="space-y-3">
-              <div>
-                <label className="block text-slate-400 mb-1">الاسم الكامل</label>
-                <input
-                  type="text"
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">الاسم الكامل *</label>
+                  <input
+                    type="text"
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">رقم الهاتف *</label>
+                  <input
+                    type="text"
+                    required
+                    dir="ltr"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 text-left"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-slate-400 mb-1">رقم الهاتف</label>
-                <input
-                  type="text"
-                  required
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100"
-                />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">كلمة المرور *</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    dir="ltr"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100 text-left"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">الدور والصلاحية *</label>
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value as Role)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100"
+                  >
+                    <option value="admin">أدمن تحكم كامل</option>
+                    <option value="engineer">مهندس طاقة</option>
+                    <option value="installer">فني تركيبات</option>
+                    <option value="technician">فني صيانة</option>
+                    <option value="merchant">تاجر معتمد</option>
+                    <option value="customer">زبون (مستخدم عادي)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">المحافظة</label>
+                  <select
+                    value={selectedGovId ?? 0}
+                    onChange={(e) => {
+                      const gId = Number(e.target.value);
+                      setSelectedGovId(gId || null);
+                      const g = governorates.find((gov) => gov.id === gId);
+                      if (g) setGovernorateName(g.name_ar);
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100"
+                  >
+                    <option value={0}>اختر المحافظة</option>
+                    {governorates.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name_ar}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">المدينة / المنطقة</label>
+                  <input
+                    type="text"
+                    placeholder="مثلاً: الكرادة، المنصور..."
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">كلمة المرور</label>
+                <label className="block text-slate-400 mb-1">أقرب نقطة دالة (اختياري)</label>
                 <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  type="text"
+                  placeholder="مثلاً: قرب تقاطع المسبح"
+                  value={landmark}
+                  onChange={(e) => setLandmark(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100"
                 />
-              </div>
-
-              <div>
-                <label className="block text-slate-400 mb-1">الدور والصلاحية</label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as Role)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-100"
-                >
-                  <option value="admin">أدمن تحكم كامل</option>
-                  <option value="merchant">تاجر معتمد</option>
-                  <option value="engineer">مهندس طاقة</option>
-                  <option value="installer">فني تركيبات</option>
-                </select>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl font-bold"
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl font-bold cursor-pointer"
                 >
                   إلغاء
                 </button>
-                <button type="submit" className="px-5 py-2 bg-amber-500 text-slate-950 rounded-xl font-bold">
+                <button type="submit" className="px-5 py-2 bg-amber-500 text-slate-950 rounded-xl font-bold cursor-pointer">
                   إضافة الحساب
                 </button>
               </div>

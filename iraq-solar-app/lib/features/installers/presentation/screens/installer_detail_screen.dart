@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/services/auth_guard.dart';
-import '../widgets/installer_chat_dialog.dart';
+import '../../../workforce/customer/create_service_order_screen.dart';
 
 class InstallerDetailScreen extends StatefulWidget {
   final Map<String, dynamic> installerData;
@@ -280,7 +280,7 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
               ],
             ),
 
-            // 5. Sticky Bottom Action Buttons (مراسلة وطلب فحص + اتصال)
+            // 5. Sticky Bottom Action Button (اطلب خدمة شمسية — توزيع تلقائي)
             Positioned(
               bottom: 16,
               left: 16,
@@ -291,59 +291,34 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 15, offset: const Offset(0, 5)),
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 15, offset: const Offset(0, 5)),
                   ],
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          final isAuth = await AuthGuard.requireAuth(
-                            context,
-                            reasonMessage: 'يرجى تسجيل الدخول أو إنشاء حساب جديد للتواصل المباشر مع المهندسين والفنيين المعتمدين وطلب الفحص الميداني.',
-                          );
-                          if (!isAuth) return;
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final isAuth = await AuthGuard.requireAuth(
+                        context,
+                        reasonMessage: 'يرجى تسجيل الدخول أو إنشاء حساب جديد لطلب خدمة شمسية وتعيين أفضل فني متوفر تلقائياً.',
+                      );
+                      if (!isAuth) return;
 
-                          InstallerChatDialog.show(
-                            context,
-                            name: name,
-                            role: role,
-                            location: governorate,
-                          );
-                        },
-                        icon: const Icon(Icons.chat_rounded, color: Colors.white, size: 18),
-                        label: const Text('مراسلة وطلب فحص ميداني', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.darkNavy,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CreateServiceOrderScreen(),
                         ),
-                      ),
+                      );
+                    },
+                    icon: const Icon(Icons.build_circle_rounded, color: Colors.white, size: 22),
+                    label: const Text('اطلب خدمة شمسية معتمدة (توزيع تلقائي)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.darkNavy,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
-                    const SizedBox(width: 10),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        final isAuth = await AuthGuard.requireAuth(
-                          context,
-                          reasonMessage: 'يرجى تسجيل الدخول أو إنشاء حساب جديد',
-                        );
-                        if (!isAuth) return;
-
-                        AppNotification.showInfo(
-                          context,
-                          'الاتصال بالمهندس $name: $phone 📞',
-                        );
-                      },
-                      icon: const Icon(Icons.call_rounded, color: AppTheme.primaryGold, size: 18),
-                      label: const Text('اتصال', style: TextStyle(color: AppTheme.darkNavy, fontWeight: FontWeight.bold, fontSize: 13)),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        side: const BorderSide(color: AppTheme.primaryGold, width: 1.5),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),

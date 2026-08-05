@@ -36,12 +36,16 @@ func setupTestRouter() (*gin.Engine, *service.AuthService) {
 	userRepo := repository.NewUserRepository(nil)
 	productRepo := repository.NewProductRepository(nil)
 	calcRepo := repository.NewSolarCalculationRepository(nil)
+	solarRepo, presetRepo, indexRepo := repository.NewCalculatorRealDataRepository(nil)
 
 	authService := service.NewAuthService(cfg.JWTSecret, userRepo, nil)
 	calcService := service.NewSolarCalculatorService(calcRepo)
+	catalogService := service.NewCatalogService(productRepo, nil)
+	recService := service.NewRecommendationService(catalogService)
+	calcEngine := service.NewSolarCalculatorEngine(solarRepo, indexRepo, presetRepo, recService)
 
 	authHandler := handler.NewAuthHandler(authService)
-	calcHandler := handler.NewCalculatorHandler(calcService)
+	calcHandler := handler.NewCalculatorHandler(calcService, nil, calcEngine, solarRepo, presetRepo)
 	productHandler := handler.NewProductHandler(productRepo, nil, nil)
 
 	router.GET("/health", func(c *gin.Context) {

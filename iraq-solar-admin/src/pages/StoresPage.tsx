@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Store, ShieldCheck, Truck, CheckCircle2, XCircle, Plus, MapPin, Edit2, Upload, Image as ImageIcon } from 'lucide-react';
+import { Store, ShieldCheck, Truck, CheckCircle2, XCircle, Plus, MapPin, Edit2, Image as ImageIcon } from 'lucide-react';
 import { api } from '../services/api';
 import type { Store as StoreType, DeliveryFee, User, Governorate } from '../types';
 

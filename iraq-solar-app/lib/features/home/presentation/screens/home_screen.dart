@@ -12,6 +12,8 @@ import '../../../merchant/presentation/screens/store_detail_screen.dart';
 import '../../../products/presentation/screens/product_detail_screen.dart';
 import '../../../products/presentation/screens/catalog_screen.dart';
 import '../../../../core/widgets/product_image_widget.dart';
+import '../../../installers/presentation/screens/installers_screen.dart';
+import '../../../workforce/customer/create_service_order_screen.dart';
 
 class SuperQiHomeScreen extends StatefulWidget {
   final Function(int tabIndex)? onNavigateTab;
@@ -599,52 +601,8 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             physics: const BouncingScrollPhysics(),
-            itemCount: _storesList.length + 1,
+            itemCount: _storesList.length,
             itemBuilder: (context, index) {
-              if (index == _storesList.length) {
-                return GestureDetector(
-                  onTap: () {
-                    widget.onNavigateTab?.call(1);
-                  },
-                  child: Container(
-                    width: 90,
-                    margin: const EdgeInsets.symmetric(horizontal: 6),
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.grey.shade200),
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 3)),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 46,
-                          height: 46,
-                          decoration: const BoxDecoration(
-                            color: AppTheme.darkNavy,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.arrow_back_rounded, color: AppTheme.primaryGold, size: 22),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'كل المتاجر ➔',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            color: AppTheme.darkNavy,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }
 
               final store = _storesList[index];
               final color = (store['color'] as Color? ?? AppTheme.primaryGold);
@@ -660,71 +618,45 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
                   );
                 },
                 child: Container(
-                  width: 96,
-                  margin: const EdgeInsets.symmetric(horizontal: 6),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.grey.shade200),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 3)),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  width: 80,
+                  alignment: Alignment.center,
+                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Stack(
+                    alignment: Alignment.center,
                     children: [
-                      Stack(
-                        children: [
-                          Container(
-                            width: 50,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              color: color.withOpacity(0.12),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: color, width: 1.5),
-                            ),
-                            child: store['logo_url'] != null && (store['logo_url'] as String).isNotEmpty
-                                ? ClipOval(
-                                    child: Image.network(
-                                      store['logo_url'] as String,
-                                      width: 50,
-                                      height: 50,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) => Center(child: Icon(icon, color: color, size: 26)),
-                                    ),
-                                  )
-                                : Center(
-                                    child: Icon(icon, color: color, size: 26),
-                                  ),
-                          ),
-                          if (store['verified'] == true)
-                            Positioned(
-                              top: 0,
-                              right: 0,
-                              child: Container(
-                                padding: const EdgeInsets.all(1),
-                                decoration: const BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(Icons.verified_rounded, color: AppTheme.primaryGold, size: 16),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        store['name'] as String,
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
-                          color: AppTheme.darkNavy,
+                      Container(
+                        width: 78,
+                        height: 78,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: color, width: 1),
                         ),
+                        child: store['logo_url'] != null && (store['logo_url'] as String).isNotEmpty
+                            ? ClipOval(
+                                child: Image.network(
+                                  store['logo_url'] as String,
+                                  width: 76,
+                                  height: 76,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) => Icon(icon, color: color, size: 40),
+                                ),
+                              )
+                            : Icon(icon, color: color, size: 40),
                       ),
+                      if (store['verified'] == true)
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(1),
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.verified_rounded, color: AppTheme.primaryGold, size: 18),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -868,9 +800,11 @@ class _SuperQiHomeScreenState extends State<SuperQiHomeScreen> {
           final inst = _installersList[index];
           return GestureDetector(
             onTap: () {
-              AppNotification.showInfo(
+              Navigator.push(
                 context,
-                'الاتصال بالفني المعتمد ${inst['name']}: ${inst['phone']}',
+                MaterialPageRoute(
+                  builder: (context) => const CreateServiceOrderScreen(),
+                ),
               );
             },
             child: Container(

@@ -210,6 +210,22 @@ class ApiClient {
     }
   }
 
+  // Calculators dynamic list
+  static Future<List<Map<String, dynamic>>> getCalculators() async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/calculators'), headers: h),
+      );
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        if (json['data'] is List) {
+          return List<Map<String, dynamic>>.from(json['data']);
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
   // 4. Orders: Create Order (correct payload for Go backend)
   static Future<Map<String, dynamic>> createOrder(String token, Map<String, dynamic> orderData) async {
     try {
@@ -344,6 +360,38 @@ class ApiClient {
       return jsonDecode(response.body);
     } catch (e) {
       return {'success': false, 'message': 'فشل جلب التصنيفات'};
+    }
+  }
+
+  // 9.0 Get Appliance Presets
+  static Future<List<Map<String, dynamic>>> getAppliancePresets() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/calculator/appliances'), headers: headers());
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded['data'] != null && decoded['data'] is List) {
+          return List<Map<String, dynamic>>.from(decoded['data']);
+        }
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // 9.01 Get Governorate Solar & Climate Data
+  static Future<List<Map<String, dynamic>>> getGovernorateSolarData() async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/calculator/governorates-solar'), headers: headers());
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded['data'] != null && decoded['data'] is List) {
+          return List<Map<String, dynamic>>.from(decoded['data']);
+        }
+      }
+      return [];
+    } catch (_) {
+      return [];
     }
   }
 
@@ -960,6 +1008,426 @@ class ApiClient {
       return jsonDecode(response.body);
     } catch (e) {
       return {'success': false, 'message': 'فشل جلب الأقضية والنواحي: $e'};
+    }
+  }
+
+  // ==========================================================
+  // 23. Workforce Dispatch System
+  // ==========================================================
+
+  // --- Public technicians directory (trust gallery, no phone numbers) ---
+  static Future<Map<String, dynamic>> getTechnicians({int? governorateId, String? role, String? search}) async {
+    try {
+      final params = <String, String>{'limit': '50'};
+      if (governorateId != null && governorateId > 0) params['governorate_id'] = '$governorateId';
+      if (role != null && role.isNotEmpty) params['role'] = role;
+      if (search != null && search.isNotEmpty) params['search'] = search;
+      final uri = Uri.parse('$baseUrl/technicians').replace(queryParameters: params);
+      final response = await http.get(uri, headers: headers());
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب قائمة الفنيين: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getTechnicianPortfolio(String technicianId) async {
+    try {
+      final response = await http.get(Uri.parse('$baseUrl/technicians/$technicianId/portfolio'), headers: headers());
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب معرض الأعمال: $e'};
+    }
+  }
+
+  // --- Customer: service orders ---
+  static Future<Map<String, dynamic>> createServiceOrder({
+    required String orderType,
+    required int governorateId,
+    int? districtId,
+    String? description,
+    double? systemSizeKw,
+    String? address,
+    double? lat,
+    double? lng,
+    DateTime? preferredDate,
+    String priority = 'normal',
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        'order_type': orderType,
+        'governorate_id': governorateId,
+        'priority': priority,
+      };
+      if (districtId != null) payload['district_id'] = districtId;
+      if (description != null && description.isNotEmpty) payload['description'] = description;
+      if (systemSizeKw != null) payload['system_size_kw'] = systemSizeKw;
+      if (address != null && address.isNotEmpty) payload['address'] = address;
+      if (lat != null) payload['lat'] = lat;
+      if (lng != null) payload['lng'] = lng;
+      if (preferredDate != null) payload['preferred_date'] = preferredDate.toUtc().toIso8601String();
+
+      final response = await sendAuthenticatedRequest(
+        (h) => http.post(Uri.parse('$baseUrl/service-orders'), headers: h, body: jsonEncode(payload)),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل إنشاء طلب الخدمة: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createServiceOrderFromCalculator({
+    required String orderType,
+    required int governorateId,
+    required Map<String, dynamic> calculatorResult,
+    int? districtId,
+    String? description,
+    double? systemSizeKw,
+    String? address,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        'order_type': orderType,
+        'governorate_id': governorateId,
+        'calculator_result': calculatorResult,
+        'priority': 'normal',
+      };
+      if (districtId != null) payload['district_id'] = districtId;
+      if (description != null && description.isNotEmpty) payload['description'] = description;
+      if (systemSizeKw != null) payload['system_size_kw'] = systemSizeKw;
+      if (address != null && address.isNotEmpty) payload['address'] = address;
+
+      final response = await sendAuthenticatedRequest(
+        (h) => http.post(Uri.parse('$baseUrl/service-orders/from-calculator'), headers: h, body: jsonEncode(payload)),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل إنشاء طلب الخدمة من الحاسبة: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getMyServiceOrders() async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/service-orders'), headers: h),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب طلبات الخدمة: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getServiceOrderDetail(String orderId) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/service-orders/$orderId'), headers: h),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب تفاصيل الطلب: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> submitServiceReview({
+    required String orderId,
+    required int qualityRating,
+    required int punctualityRating,
+    required int speedRating,
+    String? comment,
+  }) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.post(
+          Uri.parse('$baseUrl/service-orders/$orderId/review'),
+          headers: h,
+          body: jsonEncode({
+            'quality_rating': qualityRating,
+            'punctuality_rating': punctualityRating,
+            'speed_rating': speedRating,
+            if (comment != null && comment.isNotEmpty) 'comment': comment,
+          }),
+        ),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل إرسال التقييم: $e'};
+    }
+  }
+
+  // --- Technician: profile & availability ---
+  static Future<Map<String, dynamic>> getTechnicianProfile() async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/technician/profile'), headers: h),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب ملف الفني: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateAvailability({
+    required String status,
+    String? availableFrom,
+    String? availableUntil,
+    List<String>? workingDays,
+  }) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.put(
+          Uri.parse('$baseUrl/technician/availability'),
+          headers: h,
+          body: jsonEncode({
+            'status': status,
+            if (availableFrom != null) 'available_from': availableFrom,
+            if (availableUntil != null) 'available_until': availableUntil,
+            if (workingDays != null) 'working_days': workingDays,
+          }),
+        ),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل تحديث حالة التواجد: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateTechnicianZones({
+    required List<int> governorateIds,
+    int? primaryGovernorate,
+  }) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.put(
+          Uri.parse('$baseUrl/technician/zones'),
+          headers: h,
+          body: jsonEncode({
+            'governorate_ids': governorateIds,
+            if (primaryGovernorate != null) 'primary_governorate': primaryGovernorate,
+          }),
+        ),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل تحديث مناطق التغطية: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getTechnicianWallet() async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/technician/wallet'), headers: h),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب المحفظة: $e'};
+    }
+  }
+
+  // --- Technician: dispatch queue ---
+  static Future<Map<String, dynamic>> getDispatchQueue() async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/technician/dispatch-queue'), headers: h),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب المهام المتاحة: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> acceptDispatch(String dispatchId) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.post(Uri.parse('$baseUrl/technician/dispatch/$dispatchId/accept'), headers: h),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل قبول المهمة: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> rejectDispatch(String dispatchId, {String? reason}) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.post(
+          Uri.parse('$baseUrl/technician/dispatch/$dispatchId/reject'),
+          headers: h,
+          body: jsonEncode({if (reason != null && reason.isNotEmpty) 'reason': reason}),
+        ),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل رفض المهمة: $e'};
+    }
+  }
+
+  // --- Technician: assignments & execution ---
+  static Future<Map<String, dynamic>> getTechnicianAssignments() async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/technician/assignments'), headers: h),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب المهام المسندة: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getJobDetail(String orderId) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/technician/orders/$orderId'), headers: h),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب تفاصيل المهمة: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateAssignmentStatus(String orderId, String status, {String? notes}) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.post(
+          Uri.parse('$baseUrl/technician/orders/$orderId/status'),
+          headers: h,
+          body: jsonEncode({'status': status, if (notes != null && notes.isNotEmpty) 'notes': notes}),
+        ),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل تحديث حالة المهمة: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> toggleJobTask(String orderId, String taskId) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.post(Uri.parse('$baseUrl/technician/orders/$orderId/tasks/$taskId/toggle'), headers: h),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل تحديث المهمة: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> uploadJobMedia({
+    required String orderId,
+    required String type,
+    String? url,
+    String? content,
+    double? lat,
+    double? lng,
+  }) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.post(
+          Uri.parse('$baseUrl/technician/orders/$orderId/media'),
+          headers: h,
+          body: jsonEncode({
+            'type': type,
+            if (url != null) 'url': url,
+            if (content != null) 'content': content,
+            if (lat != null) 'lat': lat,
+            if (lng != null) 'lng': lng,
+          }),
+        ),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل رفع المرفق: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> markCustomerUnavailable({
+    required String orderId,
+    String? url,
+    String? content,
+    double? lat,
+    double? lng,
+  }) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.post(
+          Uri.parse('$baseUrl/technician/orders/$orderId/customer-unavailable'),
+          headers: h,
+          body: jsonEncode({
+            'type': 'gps_proof',
+            if (url != null) 'url': url,
+            if (content != null) 'content': content,
+            if (lat != null) 'lat': lat,
+            if (lng != null) 'lng': lng,
+          }),
+        ),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل تسجيل عدم تجاوب الزبون: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateTracking({
+    required String orderId,
+    required double lat,
+    required double lng,
+    String status = 'on_the_way',
+  }) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.post(
+          Uri.parse('$baseUrl/technician/orders/$orderId/tracking'),
+          headers: h,
+          body: jsonEncode({'lat': lat, 'lng': lng, 'status': status}),
+        ),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل تحديث الموقع: $e'};
+    }
+  }
+
+  // --- Technician: leads ---
+  static Future<Map<String, dynamic>> createTechnicianLead({
+    required String customerName,
+    required String customerPhone,
+    required String orderType,
+    String? description,
+    double? systemSizeKw,
+    int? governorateId,
+    int? districtId,
+    String? address,
+    double? estimatedPriceIqd,
+  }) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.post(
+          Uri.parse('$baseUrl/technician/leads'),
+          headers: h,
+          body: jsonEncode({
+            'customer_name': customerName,
+            'customer_phone': customerPhone,
+            'order_type': orderType,
+            if (description != null && description.isNotEmpty) 'description': description,
+            if (systemSizeKw != null) 'system_size_kw': systemSizeKw,
+            if (governorateId != null) 'governorate_id': governorateId,
+            if (districtId != null) 'district_id': districtId,
+            if (address != null && address.isNotEmpty) 'address': address,
+            if (estimatedPriceIqd != null) 'estimated_price_iqd': estimatedPriceIqd,
+          }),
+        ),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل إرسال الطلب: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getTechnicianLeads() async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.get(Uri.parse('$baseUrl/technician/leads'), headers: h),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل جلب طلباتك: $e'};
     }
   }
 }

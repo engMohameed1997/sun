@@ -177,6 +177,25 @@ func (r *AdminRepository) GetUserByID(ctx context.Context, id uuid.UUID) (*domai
 	return &user, err
 }
 
+func (r *AdminRepository) ensureTechnicianRow(ctx context.Context, u *domain.User) {
+	roleStr := string(u.Role)
+	if roleStr != "installer" && roleStr != "engineer" && roleStr != "technician" && roleStr != "worker" {
+		return
+	}
+	techQuery := `
+		INSERT INTO technicians (
+			id, user_id, full_name, role, governorate_id, district_id, availability_status, level_id
+		) VALUES (
+			$1, $1, $2, $3, $4, $5, 'offline',
+			(SELECT id FROM technician_levels ORDER BY sort_order LIMIT 1)
+		) ON CONFLICT (user_id) DO UPDATE SET role = EXCLUDED.role, full_name = EXCLUDED.full_name, updated_at = NOW()`
+	
+	_, _ = r.db.ExecContext(ctx, techQuery, u.ID, u.FullName, roleStr, u.GovernorateID, u.DistrictID)
+	_, _ = r.db.ExecContext(ctx, `INSERT INTO technician_availability (technician_id, status) VALUES ($1, 'offline') ON CONFLICT DO NOTHING`, u.ID)
+	_, _ = r.db.ExecContext(ctx, `INSERT INTO technician_wallet (technician_id) VALUES ($1) ON CONFLICT DO NOTHING`, u.ID)
+	_, _ = r.db.ExecContext(ctx, `INSERT INTO technician_ranking (technician_id) VALUES ($1) ON CONFLICT DO NOTHING`, u.ID)
+}
+
 func (r *AdminRepository) CreateUserByAdmin(ctx context.Context, user *domain.User) error {
 	r.mu.Lock()
 	r.memUsers = append([]domain.User{*user}, r.memUsers...)
@@ -185,10 +204,13 @@ func (r *AdminRepository) CreateUserByAdmin(ctx context.Context, user *domain.Us
 	if r.db == nil {
 		return nil
 	}
-	query := `INSERT INTO users (id, full_name, phone, password_hash, role, governorate, city, is_active, created_at, updated_at)
-		VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9, $10)`
+	query := `INSERT INTO users (id, full_name, phone, password_hash, role, governorate, city, landmark, governorate_id, district_id, is_active, created_at, updated_at)
+		VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 	_, err := r.db.ExecContext(ctx, query, user.ID, user.FullName, user.Phone,
-		user.PasswordHash, user.Role, user.Governorate, user.City, user.IsActive, user.CreatedAt, user.UpdatedAt)
+		user.PasswordHash, user.Role, user.Governorate, user.City, user.Landmark, user.GovernorateID, user.DistrictID, user.IsActive, user.CreatedAt, user.UpdatedAt)
+	if err == nil {
+		r.ensureTechnicianRow(ctx, user)
+	}
 	return err
 }
 
@@ -211,6 +233,10 @@ func (r *AdminRepository) UpdateUser(ctx context.Context, id uuid.UUID, fullName
 	}
 	_, err := r.db.ExecContext(ctx, `UPDATE users SET full_name=$1, phone=$2, governorate=$3, city=$4, role=$5, updated_at=NOW() WHERE id=$6`,
 		fullName, phone, governorate, city, role, id)
+	if err == nil {
+		u := &domain.User{ID: id, FullName: fullName, Role: role}
+		r.ensureTechnicianRow(ctx, u)
+	}
 	return err
 }
 

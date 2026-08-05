@@ -305,3 +305,222 @@ export interface SystemSetting {
   value: string;
   updated_at: string;
 }
+
+// --- Workforce Dispatch System ---
+
+export type TechnicianRole = 'engineer' | 'installer' | 'technician' | 'worker';
+
+export type AvailabilityStatus = 'available' | 'busy' | 'suspended' | 'offline' | 'vacation';
+
+export type ServiceOrderType = 'installation' | 'maintenance' | 'inspection' | 'consultation' | 'repair';
+
+export type ServiceOrderStatus =
+  | 'new'
+  | 'dispatching'
+  | 'assigned'
+  | 'tech_accepted'
+  | 'on_the_way'
+  | 'arrived'
+  | 'working'
+  | 'waiting_customer'
+  | 'completed'
+  | 'cancelled'
+  | 'no_technician_available';
+
+export type DispatchMode = 'sequential' | 'parallel' | 'hybrid';
+
+export type DispatchStatus = 'queued' | 'sent' | 'accepted' | 'rejected' | 'expired' | 'cancelled';
+
+export type LeadStatus = 'pending_review' | 'approved' | 'rejected' | 'converted';
+
+export type ServicePaymentStatus = 'unpaid' | 'pending' | 'paid_to_technician' | 'settled';
+
+export interface TechnicianLevel {
+  id: string;
+  name: string;
+  name_ar: string;
+  min_jobs: number;
+  min_rating: number;
+  commission_rate: number;
+  badge_color: string;
+  sort_order: number;
+}
+
+export interface Technician {
+  id: string;
+  user_id: string;
+  full_name: string;
+  profile_image_url?: string;
+  phone_public?: string;
+  role: TechnicianRole;
+  specializations: string[];
+  governorate_id?: number;
+  district_id?: number;
+  experience_years: number;
+  bio?: string;
+  is_verified: boolean;
+  is_active: boolean;
+  availability_status: AvailabilityStatus;
+  rating: number;
+  completed_jobs_count: number;
+  acceptance_rate: number;
+  avg_response_minutes: number;
+  verification_level: number;
+  level_id?: string;
+  level_name_ar?: string;
+  level_badge_color?: string;
+  commission_rate?: number;
+  governorate_name?: string;
+  priority_score?: number;
+  is_featured?: boolean;
+  is_hidden?: boolean;
+  created_at: string;
+}
+
+export interface TechnicianServiceZone {
+  id: string;
+  technician_id: string;
+  governorate_id: number;
+  is_primary: boolean;
+  governorate_name_ar?: string;
+}
+
+export interface TechnicianWallet {
+  id: string;
+  technician_id: string;
+  balance_iqd: number;
+  total_earned_iqd: number;
+  total_commission_iqd: number;
+  pending_payout_iqd: number;
+  last_settlement_at?: string;
+}
+
+export interface TechnicianAvailability {
+  id: string;
+  technician_id: string;
+  status: string;
+  available_from?: string;
+  available_until?: string;
+  working_days: string[];
+}
+
+export interface TechnicianDocument {
+  id: string;
+  technician_id: string;
+  type: string;
+  url: string;
+  status: 'pending' | 'under_review' | 'approved' | 'rejected';
+  created_at: string;
+}
+
+export interface ServiceOrder {
+  id: string;
+  order_number: string;
+  customer_id?: string;
+  order_type: ServiceOrderType;
+  description?: string;
+  system_size_kw?: number;
+  governorate_id?: number;
+  address?: string;
+  preferred_date?: string;
+  status: ServiceOrderStatus;
+  priority: string;
+  assigned_technician_id?: string;
+  dispatch_mode: DispatchMode;
+  created_at: string;
+  completed_at?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  governorate_name?: string;
+  district_name?: string;
+  technician_name?: string;
+}
+
+export interface DispatchQueueEntry {
+  id: string;
+  service_order_id: string;
+  technician_id: string;
+  priority_score: number;
+  dispatch_mode: DispatchMode;
+  position: number;
+  status: DispatchStatus;
+  selection_reason: Record<string, any>;
+  sent_at?: string;
+  responded_at?: string;
+  expires_at?: string;
+  technician_name?: string;
+}
+
+export interface DispatchSettings {
+  id: string;
+  service_type: ServiceOrderType;
+  dispatch_mode: DispatchMode;
+  response_timeout_minutes: number;
+  parallel_candidates_count: number;
+  minimum_score: number;
+  auto_assign_enabled: boolean;
+}
+
+export interface TechnicianDispatchStats {
+  id: string;
+  technician_id: string;
+  technician_name?: string;
+  orders_received_this_month: number;
+  orders_received_this_week: number;
+  total_orders_received: number;
+  total_earnings_this_month: number;
+  last_order_received_at?: string;
+  days_since_last_order: number;
+  is_new_technician: boolean;
+  new_technician_orders_count: number;
+  fairness_boost: number;
+}
+
+export interface ServicePricing {
+  id: string;
+  order_id: string;
+  base_price_iqd: number;
+  platform_commission_percent: number;
+  platform_commission_iqd: number;
+  technician_payout_iqd: number;
+  payment_status: ServicePaymentStatus;
+  settled_at?: string;
+  created_at: string;
+  order_number?: string;
+  technician_name?: string;
+}
+
+export interface TechnicianLead {
+  id: string;
+  technician_id: string;
+  technician_name?: string;
+  customer_name: string;
+  customer_phone: string;
+  order_type: ServiceOrderType;
+  description?: string;
+  system_size_kw?: number;
+  governorate_id?: number;
+  address?: string;
+  estimated_price_iqd?: number;
+  status: LeadStatus;
+  converted_order_id?: string;
+  created_at: string;
+}
+
+export interface ServiceOrderStatusEvent {
+  id: string;
+  order_id: string;
+  status: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface TechnicianTracking {
+  id: string;
+  order_id: string;
+  technician_id: string;
+  lat: number;
+  lng: number;
+  status: string;
+  created_at: string;
+}

@@ -50,6 +50,12 @@ services:
       - ./migrations/011_orders_branch_relation.sql:/docker-entrypoint-initdb.d/011_orders_branch_relation.sql
       - ./migrations/012_add_location_hierarchy.sql:/docker-entrypoint-initdb.d/012_add_location_hierarchy.sql
       - ./migrations/013_add_auth_security_tables.sql:/docker-entrypoint-initdb.d/013_add_auth_security_tables.sql
+      - ./migrations/014_add_support_tickets.sql:/docker-entrypoint-initdb.d/014_add_support_tickets.sql
+      - ./migrations/015_enterprise_banner_system.sql:/docker-entrypoint-initdb.d/015_enterprise_banner_system.sql
+      - ./migrations/016_drop_legacy_banner_tables.sql:/docker-entrypoint-initdb.d/016_drop_legacy_banner_tables.sql
+      - ./migrations/017_create_calculators_system.sql:/docker-entrypoint-initdb.d/017_create_calculators_system.sql
+      - ./migrations/018_calculator_real_data_v2.sql:/docker-entrypoint-initdb.d/018_calculator_real_data_v2.sql
+      - ./migrations/019_workforce_management_system.sql:/docker-entrypoint-initdb.d/019_workforce_management_system.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d iraq_solar_db"]
       interval: 5s
