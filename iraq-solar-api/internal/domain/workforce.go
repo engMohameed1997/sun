@@ -404,30 +404,32 @@ type ServiceOrder struct {
 
 // CustomerServiceOrderView hides technician identity/contact details.
 type CustomerServiceOrderView struct {
-	ID              uuid.UUID                  `json:"id"`
-	OrderNumber     string                     `json:"order_number"`
-	OrderType       ServiceOrderType           `json:"order_type"`
-	Description     *string                    `json:"description,omitempty"`
-	SystemSizeKW    *float64                   `json:"system_size_kw,omitempty"`
-	Address         *string                    `json:"address,omitempty"`
-	GovernorateName *string                    `json:"governorate_name,omitempty"`
-	PreferredDate   *time.Time                 `json:"preferred_date,omitempty"`
-	Status          ServiceOrderStatus         `json:"status"`
-	StatusLabelAr   string                     `json:"status_label_ar"`
-	CreatedAt       time.Time                  `json:"created_at"`
-	CompletedAt     *time.Time                 `json:"completed_at,omitempty"`
-	Technician      *AssignedTechnicianSummary `json:"technician,omitempty"`
-	Tracking        *TechnicianTracking        `json:"tracking,omitempty"`
-	Timeline        []ServiceOrderStatusEvent  `json:"timeline,omitempty"`
-	Pricing         *ServicePricing            `json:"pricing,omitempty"`
+	ID                   uuid.UUID                  `json:"id"`
+	OrderNumber          string                     `json:"order_number"`
+	OrderType            ServiceOrderType           `json:"order_type"`
+	Description          *string                    `json:"description,omitempty"`
+	SystemSizeKW         *float64                   `json:"system_size_kw,omitempty"`
+	Address              *string                    `json:"address,omitempty"`
+	GovernorateName      *string                    `json:"governorate_name,omitempty"`
+	PreferredDate        *time.Time                 `json:"preferred_date,omitempty"`
+	Status               ServiceOrderStatus         `json:"status"`
+	StatusLabelAr        string                     `json:"status_label_ar"`
+	AssignedTechnicianID *uuid.UUID                 `json:"assigned_technician_id,omitempty"`
+	CreatedAt            time.Time                  `json:"created_at"`
+	CompletedAt          *time.Time                 `json:"completed_at,omitempty"`
+	Technician           *AssignedTechnicianSummary `json:"technician,omitempty"`
+	Tracking             *TechnicianTracking        `json:"tracking,omitempty"`
+	Timeline             []ServiceOrderStatusEvent  `json:"timeline,omitempty"`
+	Pricing              *ServicePricing            `json:"pricing,omitempty"`
 }
 
 // AssignedTechnicianSummary is the limited technician info exposed to customers.
 type AssignedTechnicianSummary struct {
-	FirstName          string  `json:"first_name"`
-	ProfileImageURL    *string `json:"profile_image_url,omitempty"`
-	Rating             float64 `json:"rating"`
-	CompletedJobsCount int     `json:"completed_jobs_count"`
+	ID                 uuid.UUID `json:"id"`
+	FirstName          string    `json:"first_name"`
+	ProfileImageURL    *string   `json:"profile_image_url,omitempty"`
+	Rating             float64   `json:"rating"`
+	CompletedJobsCount int       `json:"completed_jobs_count"`
 	LevelNameAr        *string `json:"level_name_ar,omitempty"`
 	LevelBadgeColor    *string `json:"level_badge_color,omitempty"`
 }

@@ -87,6 +87,12 @@ func (h *NotificationHandler) UnreadCount(c *gin.Context) {
 }
 
 func (h *NotificationHandler) MarkAsRead(c *gin.Context) {
+	userID, ok := getUserIDFromContext(c)
+	if !ok {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
+		return
+	}
+
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -94,7 +100,7 @@ func (h *NotificationHandler) MarkAsRead(c *gin.Context) {
 		return
 	}
 
-	err = h.repo.MarkAsRead(c.Request.Context(), id)
+	err = h.repo.MarkAsRead(c.Request.Context(), id, userID)
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusInternalServerError, "حدث خطأ أثناء تحديث الإشعار", "INTERNAL_ERROR", err)
 		return
@@ -120,6 +126,12 @@ func (h *NotificationHandler) MarkAllAsRead(c *gin.Context) {
 }
 
 func (h *NotificationHandler) DeleteNotification(c *gin.Context) {
+	userID, ok := getUserIDFromContext(c)
+	if !ok {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "غير مصرح", "UNAUTHORIZED", nil)
+		return
+	}
+
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -127,7 +139,7 @@ func (h *NotificationHandler) DeleteNotification(c *gin.Context) {
 		return
 	}
 
-	err = h.repo.Delete(c.Request.Context(), id)
+	err = h.repo.Delete(c.Request.Context(), id, userID)
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusInternalServerError, "حدث خطأ أثناء حذف الإشعار", "INTERNAL_ERROR", err)
 		return

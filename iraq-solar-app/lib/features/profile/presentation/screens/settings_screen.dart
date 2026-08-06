@@ -14,6 +14,7 @@ import 'favorite_stores_screen.dart';
 import 'security_settings_screen.dart';
 import 'support_help_screen.dart';
 import '../../../home/presentation/screens/notifications_screen.dart';
+import '../../../home/presentation/screens/main_navigation_screen.dart';
 
 class SolarSettingsScreen extends StatefulWidget {
   const SolarSettingsScreen({Key? key}) : super(key: key);
@@ -117,8 +118,12 @@ class _SolarSettingsScreenState extends State<SolarSettingsScreen> {
                 await AuthStorageService.logout();
                 if (!mounted) return;
                 Navigator.pop(ctx);
-                _loadProfile();
                 AppNotification.showInfo(context, 'تم تسجيل الخروج بنجاح');
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
+                  (route) => false,
+                );
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.redAccent,

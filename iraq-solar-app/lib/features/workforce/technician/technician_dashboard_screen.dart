@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/services/websocket_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_toast.dart';
 import '../shared/workforce_constants.dart';
 import 'dispatch_queue_screen.dart';
 import 'job_detail_screen.dart';
@@ -27,11 +30,30 @@ class _TechnicianDashboardScreenState extends State<TechnicianDashboardScreen> {
   String _availability = 'offline';
   bool _isUpdatingAvailability = false;
   final GlobalKey<_TechnicianAssignmentsViewState> _assignmentsKey = GlobalKey();
+  StreamSubscription<WSMessage>? _wsSub;
 
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    _wsSub = WebSocketService.instance.messageStream.listen((msg) {
+      if (!mounted) return;
+      if (msg.event == 'new_dispatch' || msg.type == 'dispatch' || msg.event.startsWith('service_order')) {
+        _assignmentsKey.currentState?.reload();
+        AppNotification.showInfo(
+          context,
+          '⚡ تم إضافة طلب خدمة جديد إلى حسابك. يرجى فحص عروض العمل وطلباتك المكلفة.',
+          title: 'إشعار مهمة جديد',
+        );
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _wsSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadProfile() async {

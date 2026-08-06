@@ -37,13 +37,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     // Listen for incoming notifications & order status changes and show SnackBar
     _wsSub = WebSocketService.instance.messageStream.listen((msg) {
-      if ((msg.event == 'notification.created' || msg.event == 'order.status_changed') && mounted) {
+      if ((msg.event == 'notification.created' ||
+           msg.event == 'order.status_changed' ||
+           msg.event == 'service_order.created' ||
+           msg.event == 'service_order.status_changed') && mounted) {
         String title = 'إشعار جديد 🔔';
         String body = '';
 
         if (msg.isNotification || msg.event == 'notification.created') {
           title = msg.payload['title']?.toString() ?? 'إشعار جديد';
           body = msg.payload['body']?.toString() ?? '';
+        } else if (msg.event == 'service_order.created') {
+          title = 'طلب خدمة شمسية 🛠️';
+          final orderNum = msg.payload['order_number']?.toString() ?? '';
+          body = 'تم استلام طلب الخدمة الرقم #$orderNum بنجاح';
+        } else if (msg.event == 'service_order.status_changed') {
+          title = 'تحديث طلب الخدمة 🛠️';
+          final status = msg.payload['status']?.toString() ?? '';
+          body = 'تم تحديث حالة طلب الخدمة الخاصة بك إلى: $status';
         } else {
           title = 'تحديث حالة الطلب 📦';
           final toStatus = msg.payload['to_status']?.toString() ?? '';

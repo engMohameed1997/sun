@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ClipboardList, RefreshCw, UserCheck, X, MapPin, Clock, Route, Search } from 'lucide-react';
+import { ClipboardList, RefreshCw, UserCheck, X, MapPin, Clock, Route, Search, Wifi } from 'lucide-react';
 import { api } from '../services/api';
+import { useOrdersWebSocket } from '../hooks/useOrdersWebSocket';
 import type {
   DispatchQueueEntry,
   ServiceOrder,
@@ -68,6 +69,15 @@ export const ServiceOrdersPage: React.FC = () => {
     }
   }, [search, typeFilter]);
 
+  const handleRealtimeUpdate = useCallback(() => {
+    fetchOrders();
+  }, [fetchOrders]);
+
+  const { status: wsStatus } = useOrdersWebSocket({
+    onServiceOrderCreated: handleRealtimeUpdate,
+    onServiceOrderStatusChanged: handleRealtimeUpdate,
+  });
+
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
@@ -134,6 +144,12 @@ export const ServiceOrdersPage: React.FC = () => {
           <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2">
             <ClipboardList className="text-amber-400" size={22} />
             الطلبات الخدمية ومحرك التوزيع
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+              wsStatus === 'connected' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'
+            }`}>
+              <Wifi size={10} className={wsStatus === 'connected' ? 'animate-pulse' : ''} />
+              {wsStatus === 'connected' ? 'مباشر (WebSocket)' : 'جاري الاتصال...'}
+            </span>
           </h1>
           <p className="text-slate-400 text-xs mt-1">
             متابعة طابور التوزيع، التعيين اليدوي، إعادة التوزيع، وتتبع الفني لحظياً

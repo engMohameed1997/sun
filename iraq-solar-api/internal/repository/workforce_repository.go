@@ -82,6 +82,7 @@ type WorkforceRepository interface {
 	MarkDispatchSent(ctx context.Context, dispatchID uuid.UUID, timeoutMinutes int) error
 	UpdateDispatchStatus(ctx context.Context, dispatchID uuid.UUID, status domain.DispatchStatus) error
 	CancelRemainingDispatch(ctx context.Context, orderID, winnerID uuid.UUID) error
+	ClearDispatchQueue(ctx context.Context, orderID uuid.UUID) error
 	GetNextDispatchCandidate(ctx context.Context, orderID uuid.UUID) (*domain.DispatchQueueEntry, error)
 	ListTechnicianOffers(ctx context.Context, technicianID uuid.UUID) ([]domain.DispatchOffer, error)
 	ExpireStaleDispatches(ctx context.Context) ([]domain.DispatchQueueEntry, error)

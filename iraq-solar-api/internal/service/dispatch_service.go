@@ -49,6 +49,21 @@ func NewDispatchService(
 
 // CreateServiceOrder persists a customer service order and kicks off dispatching.
 func (s *DispatchService) CreateServiceOrder(ctx context.Context, customerID *uuid.UUID, req domain.CreateServiceOrderRequest, calcResult json.RawMessage) (*domain.ServiceOrder, error) {
+	if customerID != nil {
+		existing, err := s.repo.ListCustomerServiceOrders(ctx, *customerID)
+		if err == nil {
+			for _, o := range existing {
+				if o.Status != domain.SvcStatusCompleted && o.Status != domain.SvcStatusCancelled && o.Status != domain.SvcStatusNoTechnicianAvailable {
+					label := domain.ServiceOrderStatusLabels[o.Status]
+					if label == "" {
+						label = string(o.Status)
+					}
+					return nil, fmt.Errorf("لديك طلب خدمة قائم برقم (#%s) بحالة (%s). يرجى متابعة الطلب أو إلغاؤه أولاً قبل تقديم طلب جديد.", o.OrderNumber, label)
+				}
+			}
+		}
+	}
+
 	orderNumber, err := s.repo.NextOrderNumber(ctx)
 	if err != nil {
 		return nil, err
@@ -86,7 +101,25 @@ func (s *DispatchService) CreateServiceOrder(ctx context.Context, customerID *uu
 		log.Printf("[dispatch] order %s: %v", order.OrderNumber, err)
 	}
 
-	return s.repo.GetServiceOrder(ctx, order.ID)
+	createdOrder, err := s.repo.GetServiceOrder(ctx, order.ID)
+	if err == nil && createdOrder != nil && s.hub != nil {
+		payload := map[string]any{
+			"order_id":      createdOrder.ID,
+			"order_number":  createdOrder.OrderNumber,
+			"order_type":    createdOrder.OrderType,
+			"status":        createdOrder.Status,
+			"customer_id":   createdOrder.CustomerID,
+			"customer_name": createdOrder.CustomerName,
+			"governorate":   createdOrder.GovernorateName,
+			"created_at":    createdOrder.CreatedAt,
+		}
+		if createdOrder.CustomerID != nil && *createdOrder.CustomerID != uuid.Nil {
+			go s.hub.BroadcastToUser(createdOrder.CustomerID.String(), hub.MsgDispatch, hub.EventServiceOrderCreated, payload)
+		}
+		go s.hub.BroadcastToAdmins(hub.MsgDispatch, hub.EventServiceOrderCreated, payload)
+	}
+
+	return createdOrder, err
 }
 
 // --- Dispatch engine ---
@@ -362,6 +395,7 @@ func (s *DispatchService) AcceptDispatch(ctx context.Context, dispatchID, techni
 		"order_id":      order.ID,
 		"order_number":  order.OrderNumber,
 		"status":        domain.SvcStatusAssigned,
+		"customer_id":   order.CustomerID,
 		"technician_id": technicianID,
 	})
 
@@ -579,8 +613,22 @@ func (s *DispatchService) ManualAssign(ctx context.Context, orderID, technicianI
 
 // RedispatchOrder clears the previous attempt and reruns the dispatch engine.
 func (s *DispatchService) RedispatchOrder(ctx context.Context, orderID uuid.UUID) error {
-	if err := s.repo.CancelRemainingDispatch(ctx, orderID, uuid.Nil); err != nil {
+	order, err := s.repo.GetServiceOrder(ctx, orderID)
+	if err != nil {
 		return err
+	}
+	if order == nil {
+		return ErrServiceOrderNotFound
+	}
+	if order.GovernorateID == nil || *order.GovernorateID <= 0 {
+		return errors.New("لم يتم تحديد المحافظة لهذا الطلب — يرجى تحديد المحافظة قبل البدء بالتوزيع التلقائي")
+	}
+
+	if err := s.repo.ClearDispatchQueue(ctx, orderID); err != nil {
+		return err
+	}
+	if order.AssignedTechnicianID != nil {
+		_ = s.repo.SetOrderTechnician(ctx, orderID, uuid.Nil, domain.SvcStatusDispatching)
 	}
 	return s.ProcessDispatch(ctx, orderID, nil)
 }
@@ -681,7 +729,7 @@ func defaultTasksFor(t domain.ServiceOrderType) []string {
 }
 
 func (s *DispatchService) notifyCustomerAssigned(ctx context.Context, order *domain.ServiceOrder, technicianID uuid.UUID) {
-	if s.notifier == nil || order.CustomerID == nil {
+	if order.CustomerID == nil {
 		return
 	}
 	tech, err := s.repo.GetTechnicianByID(ctx, technicianID)
@@ -696,12 +744,118 @@ func (s *DispatchService) notifyCustomerAssigned(ctx context.Context, order *dom
 		LevelNameAr:        tech.LevelNameAr,
 		LevelBadgeColor:    tech.LevelBadgeColor,
 	}
-	raw, _ := json.Marshal(map[string]any{"order_id": order.ID, "technician": summary})
-	body := fmt.Sprintf("الفني %s ⋅ تقييم %.1f ⋅ %d مشروع منجز", summary.FirstName, summary.Rating, summary.CompletedJobsCount)
-	if _, err := s.notifier.Create(ctx, *order.CustomerID, domain.NotificationTypeOrderStatus,
-		"تم تعيين فني معتمد لطلبك", body, raw); err != nil {
-		log.Printf("[dispatch] notify customer failed: %v", err)
+	payload := map[string]any{
+		"order_id":      order.ID,
+		"order_number":  order.OrderNumber,
+		"status":        domain.SvcStatusAssigned,
+		"technician":    summary,
 	}
+	if s.hub != nil {
+		go s.hub.BroadcastToUser(order.CustomerID.String(), hub.MsgDispatch, hub.EventServiceOrderStatusChanged, payload)
+	}
+
+	if s.notifier != nil {
+		raw, _ := json.Marshal(payload)
+		body := fmt.Sprintf("الفني %s ⋅ تقييم %.1f ⋅ %d مشروع منجز", summary.FirstName, summary.Rating, summary.CompletedJobsCount)
+		if _, err := s.notifier.Create(ctx, *order.CustomerID, domain.NotificationTypeOrderStatus,
+			"تم تعيين فني معتمد لطلبك", body, raw); err != nil {
+			log.Printf("[dispatch] notify customer failed: %v", err)
+		}
+	}
+}
+
+// NotifyOrderStatusChanged broadcasts WebSocket events to customer and admins, and notifies customer.
+func (s *DispatchService) NotifyOrderStatusChanged(ctx context.Context, order *domain.ServiceOrder, status domain.ServiceOrderStatus, notes *string) {
+	if order == nil {
+		return
+	}
+	payload := map[string]any{
+		"order_id":      order.ID,
+		"order_number":  order.OrderNumber,
+		"status":        status,
+		"customer_id":   order.CustomerID,
+		"technician_id": order.AssignedTechnicianID,
+	}
+	if notes != nil {
+		payload["notes"] = *notes
+	}
+
+	if s.hub != nil {
+		go s.hub.BroadcastToAdmins(hub.MsgDispatch, hub.EventServiceOrderStatusChanged, payload)
+		if order.CustomerID != nil && *order.CustomerID != uuid.Nil {
+			go s.hub.BroadcastToUser(order.CustomerID.String(), hub.MsgDispatch, hub.EventServiceOrderStatusChanged, payload)
+		}
+	}
+
+	if s.notifier != nil && order.CustomerID != nil && *order.CustomerID != uuid.Nil {
+		var title, body string
+		switch status {
+		case domain.SvcStatusOnTheWay:
+			title = "الفني في الطريق إليك 🚗"
+			body = fmt.Sprintf("الفني متوجه حالياً إلى عنوانك لتنفيذ الطلب #%s", order.OrderNumber)
+		case domain.SvcStatusArrived:
+			title = "وصل الفني إلى الموقع 📍"
+			body = fmt.Sprintf("وصل الفني إلى الموقع لبدء المعاينة والعمل على الطلب #%s", order.OrderNumber)
+		case domain.SvcStatusWorking:
+			title = "بدأت أعمال التنفيذ 🛠️"
+			body = fmt.Sprintf("بدأ الفني بالعمل الفعلي على تنفيذ الطلب #%s", order.OrderNumber)
+		case domain.SvcStatusCompleted:
+			title = "تم إنجاز الطلب بنجاح 🎉"
+			body = fmt.Sprintf("اكتملت جميع أعمال الطلب #%s بنجاح. شكراً لاستخدامك خدماتنا!", order.OrderNumber)
+		case domain.SvcStatusCancelled:
+			title = "تم إلغاء الطلب ❌"
+			body = fmt.Sprintf("تم إلغاء طلب الخدمة #%s", order.OrderNumber)
+		default:
+			title = "تحديث حالة الطلب 📋"
+			label := domain.ServiceOrderStatusLabels[status]
+			if label == "" {
+				label = string(status)
+			}
+			body = fmt.Sprintf("تغيرت حالة طلبك #%s إلى: %s", order.OrderNumber, label)
+		}
+		raw, _ := json.Marshal(payload)
+		_, _ = s.notifier.Create(ctx, *order.CustomerID, domain.NotificationTypeOrderStatus, title, body, raw)
+	}
+}
+
+// CancelServiceOrder allows a customer to cancel a service order before work begins.
+func (s *DispatchService) CancelServiceOrder(ctx context.Context, orderID, customerID uuid.UUID, reason string) error {
+	order, err := s.repo.GetServiceOrder(ctx, orderID)
+	if err != nil || order == nil {
+		return errors.New("لم يتم العثور على طلب الخدمة")
+	}
+	if order.CustomerID != nil && *order.CustomerID != customerID {
+		return errors.New("غير مصرح بإلغاء هذا الطلب")
+	}
+	if order.Status == domain.SvcStatusCompleted || order.Status == domain.SvcStatusCancelled {
+		return errors.New("لا يمكن إلغاء طلب مكتمل أو ملغى سابقاً")
+	}
+	if order.Status == domain.SvcStatusWorking || order.Status == domain.SvcStatusOnTheWay || order.Status == domain.SvcStatusArrived {
+		return errors.New("لا يمكن إلغاء الطلب بعد بدء التنفيذ أو وصول الفني، يرجى التواصل مع الدعم")
+	}
+
+	notes := "تم إلغاء الطلب من قبل الزبون"
+	if reason != "" {
+		notes = "إلغاء الطلب: " + reason
+	}
+
+	if err := s.repo.UpdateOrderStatus(ctx, orderID, domain.SvcStatusCancelled, &customerID, &notes); err != nil {
+		return fmt.Errorf("update status to cancelled: %w", err)
+	}
+
+	if order.AssignedTechnicianID != nil {
+		_ = s.repo.SetTechnicianAvailabilityStatus(ctx, *order.AssignedTechnicianID, "available")
+	}
+
+	s.broadcastAdmins(hub.EventServiceOrderStatusChanged, map[string]any{
+		"order_id":     orderID,
+		"order_number": order.OrderNumber,
+		"status":       domain.SvcStatusCancelled,
+		"customer_id":  customerID,
+		"notes":        notes,
+	})
+
+	return nil
 }
 
 func (s *DispatchService) broadcastAdmins(event string, payload any) {
@@ -709,6 +863,13 @@ func (s *DispatchService) broadcastAdmins(event string, payload any) {
 		return
 	}
 	go s.hub.BroadcastToAdmins(hub.MsgDispatch, event, payload)
+	if m, ok := payload.(map[string]any); ok {
+		if custID, ok := m["customer_id"].(*uuid.UUID); ok && custID != nil && *custID != uuid.Nil {
+			go s.hub.BroadcastToUser(custID.String(), hub.MsgDispatch, event, payload)
+		} else if custStr, ok := m["customer_id"].(string); ok && custStr != "" {
+			go s.hub.BroadcastToUser(custStr, hub.MsgDispatch, event, payload)
+		}
+	}
 }
 
 // buildSelectionReason produces the structured explanation stored on the queue entry.

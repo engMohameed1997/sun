@@ -24,7 +24,7 @@ func Load() *Config {
 	return &Config{
 		Port:                getEnv("PORT", "8080"),
 		DatabaseURL:         getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/iraq_solar_db?sslmode=disable"),
-		JWTSecret:           getEnv("JWT_SECRET", "super-secret-iraq-solar-jwt-key-2026"),
+		JWTSecret:           getEnv("JWT_SECRET", "qtxZClELayXNccFMQcmfASu5YdkgmoHyzi2hbWIUNqyejHKOMnuc0OfajlMkFVhprJwhGZ3yXOnyr82Kyf4a7P"),
 		Environment:         getEnv("ENVIRONMENT", "development"),
 		MinIOEndpoint:       getEnv("MINIO_ENDPOINT", "localhost:9000"),
 		MinIOPublicEndpoint: getEnv("MINIO_PUBLIC_ENDPOINT", ""),

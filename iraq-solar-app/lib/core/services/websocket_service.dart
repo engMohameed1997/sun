@@ -93,6 +93,7 @@ class WebSocketService {
   Timer? _heartbeatTimer;
   int _reconnectAttempts = 0;
   static const int _maxReconnectDelay = 30; // seconds
+  static const int _maxReconnectAttempts = 10;
   bool _intentionalDisconnect = false;
 
   /// Connect to the WebSocket server.
@@ -109,7 +110,14 @@ class WebSocketService {
     connectionStatus.value = WSConnectionStatus.connecting;
 
     try {
-      final token = await AuthStorageService.getToken();
+      var token = await AuthStorageService.getToken();
+      if (token == null || token.isEmpty) {
+        final refreshed = await ApiClient.refreshTokenApi();
+        if (refreshed) {
+          token = await AuthStorageService.getToken();
+        }
+      }
+
       if (token == null || token.isEmpty) {
         debugPrint('[WebSocketService] No token available, skipping connection');
         connectionStatus.value = WSConnectionStatus.disconnected;
@@ -243,14 +251,19 @@ class WebSocketService {
   }
 
   /// Reconnect with exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s.
+  /// Stops after [_maxReconnectAttempts] to avoid infinite loops.
   void _scheduleReconnect() {
     if (_intentionalDisconnect) return;
 
+    if (_reconnectAttempts >= _maxReconnectAttempts) {
+      debugPrint('[WebSocketService] Max reconnect attempts ($_maxReconnectAttempts) reached, stopping');
+      connectionStatus.value = WSConnectionStatus.error;
+      return;
+    }
+
     _reconnectTimer?.cancel();
-    final delay = min(
-      pow(2, _reconnectAttempts).toInt(),
-      _maxReconnectDelay,
-    );
+    final exponent = _reconnectAttempts < 5 ? _reconnectAttempts : 5;
+    final delay = min(pow(2, exponent).toInt(), _maxReconnectDelay);
     _reconnectAttempts++;
 
     debugPrint('[WebSocketService] Reconnecting in ${delay}s (attempt $_reconnectAttempts)');

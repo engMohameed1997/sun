@@ -35,6 +35,7 @@ class _SolarLoginScreenState extends State<SolarLoginScreen> {
       password: password,
     );
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (res['success'] == true) {
@@ -59,14 +60,26 @@ class _SolarLoginScreenState extends State<SolarLoginScreen> {
         });
       }
       await ApiClient.fetchAndSaveUserProfile();
-      // Connect WebSocket for real-time notifications
-      WebSocketService.instance.connect();
-      AppNotification.showSuccess(context, res['message'] ?? 'تم تسجيل الدخول بنجاح 🎉');
+      try {
+        WebSocketService.instance.connect();
+      } catch (_) {}
+
       if (mounted) {
-        Navigator.of(context).pop(true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message'] ?? 'تم تسجيل الدخول بنجاح 🎉'),
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop(true);
+        }
       }
     } else {
-      AppNotification.showError(context, res['message'] ?? 'فشل تسجيل الدخول: رقم الهاتف أو كلمة المرور غير صحيحة');
+      if (mounted) {
+        AppNotification.showError(context, res['message'] ?? 'فشل تسجيل الدخول: رقم الهاتف أو كلمة المرور غير صحيحة');
+      }
     }
   }
 

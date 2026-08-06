@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../../core/services/auth_guard.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../workforce/customer/create_service_order_screen.dart';
+import '../../../workforce/customer/service_order_detail_screen.dart';
+import '../../../workforce/shared/workforce_constants.dart';
 
 class InstallerDetailScreen extends StatefulWidget {
   final Map<String, dynamic> installerData;
@@ -19,6 +22,7 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
   int _currentProjectPage = 0;
   Timer? _sliderTimer;
   bool _isFavoriteInstaller = false;
+  Map<String, dynamic>? _activeOrderForThisTech;
 
   late List<Map<String, String>> _projects;
 
@@ -36,6 +40,27 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
         ];
 
     _startProjectsSlider();
+    _checkExistingOrders();
+  }
+
+  Future<void> _checkExistingOrders() async {
+    final res = await ApiClient.getMyServiceOrders();
+    if (!mounted || res['success'] != true) return;
+    final list = List<Map<String, dynamic>>.from(res['data'] ?? []);
+    final techId = widget.installerData['id']?.toString() ?? widget.installerData['user_id']?.toString();
+
+    for (var o in list) {
+      final status = o['status']?.toString() ?? '';
+      if (status == 'completed' || status == 'cancelled') continue;
+
+      final assignedTechId = o['assigned_technician_id']?.toString() ?? o['technician']?['id']?.toString();
+
+      // Matches this specific technician or active order pending assignment
+      if (assignedTechId == techId || assignedTechId == null || techId == null) {
+        setState(() => _activeOrderForThisTech = o);
+        break;
+      }
+    }
   }
 
   void _startProjectsSlider() {
@@ -216,6 +241,8 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        _buildActiveOrderBanner(),
+
                         // Quick Stats Row
                         Container(
                           padding: const EdgeInsets.all(16),
@@ -304,6 +331,43 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
                       );
                       if (!isAuth) return;
 
+                      if (_activeOrderForThisTech != null) {
+                        final createNew = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => Directionality(
+                            textDirection: TextDirection.rtl,
+                            child: AlertDialog(
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              title: const Text('طلب خدمة جاري', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.darkNavy)),
+                              content: Text('لديك طلب جاري بالفعل (#${_activeOrderForThisTech!['order_number']}). هل ترغب بمتابعة الطلب الحالي أم إنشاء طلب جديد إضافي؟'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.pop(ctx, false);
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => ServiceOrderDetailScreen(orderId: _activeOrderForThisTech!['id'].toString()),
+                                      ),
+                                    );
+                                  },
+                                  child: const Text('متابعة الطلب الحالي', style: TextStyle(color: AppTheme.primaryGold, fontWeight: FontWeight.bold)),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.darkNavy,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  child: const Text('إنشاء طلب جديد', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                        if (createNew != true) return;
+                      }
+
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -311,10 +375,15 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
                         ),
                       );
                     },
-                    icon: const Icon(Icons.build_circle_rounded, color: Colors.white, size: 22),
-                    label: const Text('اطلب خدمة شمسية معتمدة (توزيع تلقائي)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                    icon: Icon(_activeOrderForThisTech != null ? Icons.visibility_rounded : Icons.build_circle_rounded, color: Colors.white, size: 22),
+                    label: Text(
+                      _activeOrderForThisTech != null
+                          ? 'متابعة الطلب الجاري (#${_activeOrderForThisTech!['order_number']})'
+                          : 'اطلب خدمة شمسية معتمدة (توزيع تلقائي)',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.darkNavy,
+                      backgroundColor: _activeOrderForThisTech != null ? const Color(0xFFD97706) : AppTheme.darkNavy,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
@@ -324,6 +393,63 @@ class _InstallerDetailScreenState extends State<InstallerDetailScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildActiveOrderBanner() {
+    if (_activeOrderForThisTech == null) return const SizedBox.shrink();
+    final status = _activeOrderForThisTech!['status']?.toString() ?? '';
+    final orderNum = _activeOrderForThisTech!['order_number']?.toString() ?? '';
+    final statusLabel = _activeOrderForThisTech!['status_label_ar']?.toString() ??
+        WorkforceConstants.customerStatusLabels[status] ?? status;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFF59E0B)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.engineering_rounded, color: Color(0xFFD97706), size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'لديك طلب خدمة جاري مع هذا الفني',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF92400E)),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'طلب رقم #$orderNum • الحالة: $statusLabel',
+                  style: const TextStyle(fontSize: 11, color: Color(0xFFB45309)),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ServiceOrderDetailScreen(orderId: _activeOrderForThisTech!['id'].toString()),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD97706),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('التفاصيل', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }

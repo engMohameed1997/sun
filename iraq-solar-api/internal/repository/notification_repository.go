@@ -42,11 +42,11 @@ func (r *NotificationRepository) ListByRecipient(ctx context.Context, recipientI
 	return notifications, total, err
 }
 
-func (r *NotificationRepository) MarkAsRead(ctx context.Context, id uuid.UUID) error {
+func (r *NotificationRepository) MarkAsRead(ctx context.Context, id, recipientID uuid.UUID) error {
 	if r.db == nil {
 		return nil
 	}
-	_, err := r.db.ExecContext(ctx, "UPDATE notifications SET is_read = true WHERE id = $1", id)
+	_, err := r.db.ExecContext(ctx, "UPDATE notifications SET is_read = true WHERE id = $1 AND recipient_id = $2", id, recipientID)
 	return err
 }
 
@@ -67,10 +67,10 @@ func (r *NotificationRepository) CountUnread(ctx context.Context, recipientID uu
 	return count, err
 }
 
-func (r *NotificationRepository) Delete(ctx context.Context, id uuid.UUID) error {
+func (r *NotificationRepository) Delete(ctx context.Context, id, recipientID uuid.UUID) error {
 	if r.db == nil {
 		return nil
 	}
-	_, err := r.db.ExecContext(ctx, "DELETE FROM notifications WHERE id = $1", id)
+	_, err := r.db.ExecContext(ctx, "DELETE FROM notifications WHERE id = $1 AND recipient_id = $2", id, recipientID)
 	return err
 }

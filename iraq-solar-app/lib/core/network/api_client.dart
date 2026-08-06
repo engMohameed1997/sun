@@ -178,7 +178,7 @@ class ApiClient {
         Uri.parse('$baseUrl/auth/register'),
         headers: headers(),
         body: jsonEncode(payload),
-      );
+      ).timeout(const Duration(seconds: 12));
 
       return jsonDecode(response.body);
     } catch (e) {
@@ -202,7 +202,7 @@ class ApiClient {
         Uri.parse('$baseUrl/auth/login'),
         headers: headers(),
         body: jsonEncode(payload),
-      );
+      ).timeout(const Duration(seconds: 12));
 
       return jsonDecode(response.body);
     } catch (e) {
@@ -1083,6 +1083,7 @@ class ApiClient {
     String? description,
     double? systemSizeKw,
     String? address,
+    DateTime? preferredDate,
   }) async {
     try {
       final payload = <String, dynamic>{
@@ -1095,6 +1096,7 @@ class ApiClient {
       if (description != null && description.isNotEmpty) payload['description'] = description;
       if (systemSizeKw != null) payload['system_size_kw'] = systemSizeKw;
       if (address != null && address.isNotEmpty) payload['address'] = address;
+      if (preferredDate != null) payload['preferred_date'] = preferredDate.toUtc().toIso8601String();
 
       final response = await sendAuthenticatedRequest(
         (h) => http.post(Uri.parse('$baseUrl/service-orders/from-calculator'), headers: h, body: jsonEncode(payload)),
@@ -1102,6 +1104,17 @@ class ApiClient {
       return jsonDecode(response.body);
     } catch (e) {
       return {'success': false, 'message': 'فشل إنشاء طلب الخدمة من الحاسبة: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> cancelServiceOrder(String orderId) async {
+    try {
+      final response = await sendAuthenticatedRequest(
+        (h) => http.post(Uri.parse('$baseUrl/service-orders/$orderId/cancel'), headers: h),
+      );
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'success': false, 'message': 'فشل إلغاء طلب الخدمة: $e'};
     }
   }
 
@@ -1114,6 +1127,18 @@ class ApiClient {
     } catch (e) {
       return {'success': false, 'message': 'فشل جلب طلبات الخدمة: $e'};
     }
+  }
+
+  static List<Map<String, dynamic>> extractServiceOrders(Map<String, dynamic> res) {
+    if (res['success'] != true || res['data'] == null) return [];
+    final data = res['data'];
+    if (data is List) {
+      return List<Map<String, dynamic>>.from(data);
+    }
+    if (data is Map && data['orders'] is List) {
+      return List<Map<String, dynamic>>.from(data['orders']);
+    }
+    return [];
   }
 
   static Future<Map<String, dynamic>> getServiceOrderDetail(String orderId) async {

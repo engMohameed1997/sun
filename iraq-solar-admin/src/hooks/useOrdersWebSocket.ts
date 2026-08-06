@@ -4,6 +4,7 @@ import type {
   WSMessageType,
   OrderFull,
   OrderStatusChangedPayload,
+  TechnicianAvailabilityPayload,
 } from '../types';
 
 export type WSConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';
@@ -15,6 +16,12 @@ export interface UseOrdersWebSocketOptions {
   onStatusChanged?: (payload: OrderStatusChangedPayload) => void;
   /** Called when an order is cancelled */
   onOrderCancelled?: (payload: OrderStatusChangedPayload) => void;
+  /** Called when a new solar service order is created */
+  onServiceOrderCreated?: (payload: any) => void;
+  /** Called when a solar service order status changes */
+  onServiceOrderStatusChanged?: (payload: any) => void;
+  /** Called when a technician's live availability status changes */
+  onTechnicianAvailabilityChanged?: (payload: TechnicianAvailabilityPayload) => void;
   /** Base URL of the API (e.g. "http://localhost:8080"). Defaults to VITE_API_BASE_URL */
   baseUrl?: string;
   /** JWT token for auth */
@@ -42,13 +49,16 @@ function getWsUrl(baseUrl?: string): string {
  * - Automatic connection on mount
  * - Exponential backoff reconnect on disconnect/error
  * - Heartbeat pings every 25s to keep the connection alive
- * - Role-based callbacks (onNewOrder, onStatusChanged, onOrderCancelled)
+ * - Real-time callbacks (orders, service orders, technician availability)
  */
 export function useOrdersWebSocket(options: UseOrdersWebSocketOptions = {}) {
   const {
     onNewOrder,
     onStatusChanged,
     onOrderCancelled,
+    onServiceOrderCreated,
+    onServiceOrderStatusChanged,
+    onTechnicianAvailabilityChanged,
     baseUrl,
     token,
     enabled = true,
@@ -65,9 +75,16 @@ export function useOrdersWebSocket(options: UseOrdersWebSocketOptions = {}) {
   const onNewOrderRef = useRef(onNewOrder);
   const onStatusChangedRef = useRef(onStatusChanged);
   const onOrderCancelledRef = useRef(onOrderCancelled);
+  const onServiceOrderCreatedRef = useRef(onServiceOrderCreated);
+  const onServiceOrderStatusChangedRef = useRef(onServiceOrderStatusChanged);
+  const onTechnicianAvailabilityChangedRef = useRef(onTechnicianAvailabilityChanged);
+
   useEffect(() => { onNewOrderRef.current = onNewOrder; }, [onNewOrder]);
   useEffect(() => { onStatusChangedRef.current = onStatusChanged; }, [onStatusChanged]);
   useEffect(() => { onOrderCancelledRef.current = onOrderCancelled; }, [onOrderCancelled]);
+  useEffect(() => { onServiceOrderCreatedRef.current = onServiceOrderCreated; }, [onServiceOrderCreated]);
+  useEffect(() => { onServiceOrderStatusChangedRef.current = onServiceOrderStatusChanged; }, [onServiceOrderStatusChanged]);
+  useEffect(() => { onTechnicianAvailabilityChangedRef.current = onTechnicianAvailabilityChanged; }, [onTechnicianAvailabilityChanged]);
 
   const clearTimers = useCallback(() => {
     if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
@@ -77,6 +94,7 @@ export function useOrdersWebSocket(options: UseOrdersWebSocketOptions = {}) {
   }, []);
 
   const startPingInterval = useCallback((ws: WebSocket) => {
+    if (pingTimerRef.current) clearInterval(pingTimerRef.current);
     pingTimerRef.current = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'ping' as WSMessageType }));
@@ -91,9 +109,9 @@ export function useOrdersWebSocket(options: UseOrdersWebSocketOptions = {}) {
     manualCloseRef.current = false;
     setStatus('connecting');
 
-    const wsUrl = getWsUrl(baseUrl);
-    // Append token as query param (server reads it from query if not in headers)
-    const url = token ? `${wsUrl}?token=${encodeURIComponent(token)}` : wsUrl;
+    const activeToken = token || (typeof window !== 'undefined' ? localStorage.getItem('iraq_solar_token') : null);
+    const tokenParam = activeToken ? `?token=${encodeURIComponent(activeToken)}` : '';
+    const url = getWsUrl(baseUrl) + tokenParam;
 
     const ws = new WebSocket(url);
     wsRef.current = ws;
@@ -106,9 +124,12 @@ export function useOrdersWebSocket(options: UseOrdersWebSocketOptions = {}) {
 
     ws.onmessage = (event: MessageEvent) => {
       try {
-        const msg: WSMessage = JSON.parse(event.data as string);
-        switch (msg.type) {
+        const msg = JSON.parse(event.data as string) as WSMessage;
+        const eventName = msg.event || msg.type;
+
+        switch (eventName) {
           case 'order.new':
+          case 'order.created':
             onNewOrderRef.current?.(msg.payload as OrderFull);
             break;
           case 'order.status_changed':
@@ -117,8 +138,22 @@ export function useOrdersWebSocket(options: UseOrdersWebSocketOptions = {}) {
           case 'order.cancelled':
             onOrderCancelledRef.current?.(msg.payload as OrderStatusChangedPayload);
             break;
-          // pong is handled transparently
+          case 'service_order.created':
+            onServiceOrderCreatedRef.current?.(msg.payload);
+            break;
+          case 'service_order.status_changed':
+          case 'service_order.no_technician':
+            onServiceOrderStatusChangedRef.current?.(msg.payload);
+            break;
+          case 'technician.availability_changed':
+            onTechnicianAvailabilityChangedRef.current?.(msg.payload as TechnicianAvailabilityPayload);
+            break;
           default:
+            if (msg.type === 'workforce' && msg.event === 'technician.availability_changed') {
+              onTechnicianAvailabilityChangedRef.current?.(msg.payload as TechnicianAvailabilityPayload);
+            } else if (msg.type === 'dispatch') {
+              onServiceOrderStatusChangedRef.current?.(msg.payload);
+            }
             break;
         }
       } catch {

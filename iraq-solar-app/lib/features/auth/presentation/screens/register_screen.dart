@@ -195,8 +195,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
       await ApiClient.fetchAndSaveUserProfile();
       if (!mounted) return;
-      AppNotification.showSuccess(context, res['message'] ?? 'تم إنشاء الحساب وحفظ الموقع بنجاح 🎉');
-      Navigator.of(context).pop(true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message'] ?? 'تم إنشاء الحساب وحفظ الموقع بنجاح 🎉'),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(true);
+      }
     } else {
       if (!mounted) return;
       AppNotification.showError(context, res['message'] ?? 'فشل إنشاء الحساب: يرجى التأكد من البيانات أو تغيير رقم الهاتف');

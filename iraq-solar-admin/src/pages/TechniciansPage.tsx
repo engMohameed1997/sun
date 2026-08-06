@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { api } from '../services/api';
+import { useOrdersWebSocket } from '../hooks/useOrdersWebSocket';
 import type {
   Governorate,
   Technician,
@@ -21,6 +22,7 @@ import type {
   TechnicianLevel,
   TechnicianServiceZone,
   TechnicianWallet,
+  TechnicianAvailabilityPayload,
 } from '../types';
 
 const ROLE_LABELS: Record<string, string> = {
@@ -38,8 +40,8 @@ const STATUS_LABELS: Record<string, { label: string; dot: string; text: string }
   offline: { label: 'غير متصل', dot: 'bg-slate-500', text: 'text-slate-400' },
 };
 
-const SPECIALIZATIONS = ['installation', 'maintenance', 'inspection', 'inverter', 'battery', 'wiring'];
-const SPECIALIZATION_LABELS: Record<string, string> = {
+export const SPECIALIZATIONS = ['installation', 'maintenance', 'inspection', 'inverter', 'battery', 'wiring'];
+export const SPECIALIZATION_LABELS: Record<string, string> = {
   installation: 'تركيب',
   maintenance: 'صيانة',
   inspection: 'معاينة',
@@ -81,6 +83,20 @@ export const TechniciansPage: React.FC = () => {
       setIsLoading(false);
     }
   }, [search, roleFilter, statusFilter]);
+
+  const handleAvailabilityChange = useCallback((payload: TechnicianAvailabilityPayload) => {
+    setTechnicians((prev) =>
+      prev.map((t) =>
+        t.id === payload.technician_id
+          ? { ...t, availability_status: payload.availability_status as any }
+          : t
+      )
+    );
+  }, []);
+
+  useOrdersWebSocket({
+    onTechnicianAvailabilityChanged: handleAvailabilityChange,
+  });
 
   useEffect(() => {
     fetchTechnicians();

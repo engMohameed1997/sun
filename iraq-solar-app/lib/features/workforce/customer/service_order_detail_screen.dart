@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/services/websocket_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../shared/workforce_constants.dart';
 
@@ -19,11 +21,25 @@ class ServiceOrderDetailScreen extends StatefulWidget {
 class _ServiceOrderDetailScreenState extends State<ServiceOrderDetailScreen> {
   Map<String, dynamic>? _order;
   bool _isLoading = true;
+  StreamSubscription<WSMessage>? _wsSub;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _wsSub = WebSocketService.instance.messageStream.listen((msg) {
+      if (msg.type == 'dispatch' ||
+          msg.type == 'notification' ||
+          msg.event.startsWith('service_order')) {
+        _load();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _wsSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -158,6 +174,19 @@ class _ServiceOrderDetailScreenState extends State<ServiceOrderDetailScreen> {
                           const SizedBox(height: 16),
                         ],
                         _buildTimelineCard(),
+                        if (_canCancel()) ...[
+                          const SizedBox(height: 16),
+                          OutlinedButton.icon(
+                            onPressed: _cancelOrder,
+                            icon: const Icon(Icons.cancel_outlined, color: Color(0xFFEF4444)),
+                            label: const Text('إلغاء طلب الخدمة', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold)),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFFEF4444)),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                          ),
+                        ],
                         if (_order!['status'] == 'completed') ...[
                           const SizedBox(height: 16),
                           SizedBox(
@@ -180,6 +209,54 @@ class _ServiceOrderDetailScreenState extends State<ServiceOrderDetailScreen> {
                   ),
       ),
     );
+  }
+
+  bool _canCancel() {
+    final status = _order?['status']?.toString() ?? '';
+    return status == 'new' || status == 'dispatching' || status == 'assigned' || status == 'tech_accepted';
+  }
+
+  Future<void> _cancelOrder() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('إلغاء طلب الخدمة', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.darkNavy)),
+          content: const Text('هل أنت أؤكد رغبتك في إلغاء طلب الخدمة الشمسية هذا؟'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('رجوع', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEF4444),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('تأكيد الإلغاء', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final res = await ApiClient.cancelServiceOrder(widget.orderId);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(res['message']?.toString() ?? 'تم إلغاء الطلب بنجاح'),
+        backgroundColor: res['success'] == true ? AppTheme.accentGreen : const Color(0xFFEF4444),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    if (res['success'] == true) {
+      _load();
+    }
   }
 
   Widget _buildStatusCard() {

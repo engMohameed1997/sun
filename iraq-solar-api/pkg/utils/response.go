@@ -49,9 +49,13 @@ func ErrorResponse(c *gin.Context, statusCode int, clientMessage string, errorCo
 	})
 }
 
-// InternalServerError — خطأ سيرفر عام آمن لا يكشف التفاصيل الداخلية
+// InternalServerError — خطأ سيرفر عام
 func InternalServerError(c *gin.Context, internalErr error) {
-	ErrorResponse(c, http.StatusInternalServerError, "حدث خطأ غير متوقع في النظام، يرجى المحاولة لاحقاً", "INTERNAL_SERVER_ERROR", internalErr)
+	msg := "حدث خطأ غير متوقع في النظام، يرجى المحاولة لاحقاً"
+	if internalErr != nil {
+		msg = "حدث خطأ في النظام: " + internalErr.Error()
+	}
+	ErrorResponse(c, http.StatusInternalServerError, msg, "INTERNAL_SERVER_ERROR", internalErr)
 }
 
 // BadRequestError — خطأ في مدخلات المستخدم

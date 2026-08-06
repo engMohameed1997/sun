@@ -174,61 +174,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
                     const Divider(height: 32),
 
-                    // Merchant Card
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.grey.shade200),
-                        boxShadow: [
-                          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          const CircleAvatar(
-                            radius: 22,
-                            backgroundColor: AppTheme.darkNavy,
-                            child: Icon(Icons.storefront_rounded, color: AppTheme.primaryGold, size: 24),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(p['store'] as String? ?? 'متجر غير محدد', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.darkNavy)),
-                                    if (p['is_verified'] == true || p['verified'] == true) ...[
-                                      const SizedBox(width: 4),
-                                      const Icon(Icons.verified_rounded, color: Colors.blue, size: 16),
-                                      const SizedBox(width: 2),
-                                      const Text('متجر موثّق', style: TextStyle(fontSize: 10, color: Colors.blue, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ],
-                                ),
-                                const SizedBox(height: 2),
-                                Text(p['store_description'] as String? ?? '', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                              ],
-                            ),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              AppNotification.showSuccess(context, 'جاري الاتصال بـ ${p['store']} عبر الواتساب...');
-                            },
-                            icon: const Icon(Icons.chat_rounded, size: 16),
-                            label: const Text('واتساب', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF25D366),
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
                     const SizedBox(height: 30),
 
                     // Quantity & Add to Cart / Checkout Action Button

@@ -63,6 +63,7 @@ func (h *OrderHandler) ListUserOrders(c *gin.Context) {
 }
 
 // GetOrderDetails handles GET /orders/:id — returns a single order's details.
+// Only the order owner or an admin may view the order.
 func (h *OrderHandler) GetOrderDetails(c *gin.Context) {
 	orderID, err := parseOrderID(c)
 	if err != nil {
@@ -77,6 +78,11 @@ func (h *OrderHandler) GetOrderDetails(c *gin.Context) {
 	}
 	if order == nil {
 		utils.ErrorResponse(c, http.StatusNotFound, "الطلب غير موجود", "ORDER_NOT_FOUND", nil)
+		return
+	}
+
+	if !isOwnerOrAdmin(c, order.UserID) {
+		utils.ErrorResponse(c, http.StatusForbidden, "غير مصرح بالوصول لهذا الطلب", "FORBIDDEN", nil)
 		return
 	}
 
@@ -113,10 +119,26 @@ func (h *OrderHandler) UpdateOrderStatus(c *gin.Context) {
 }
 
 // CancelOrder handles DELETE /orders/:id — cancels the order.
+// Only the order owner or an admin may cancel the order.
 func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	orderID, err := parseOrderID(c)
 	if err != nil {
 		utils.BadRequestError(c, "معرف الطلب غير صالح", err)
+		return
+	}
+
+	order, err := h.orderService.GetOrderByID(c.Request.Context(), orderID)
+	if err != nil {
+		utils.InternalServerError(c, err)
+		return
+	}
+	if order == nil {
+		utils.ErrorResponse(c, http.StatusNotFound, "الطلب غير موجود", "ORDER_NOT_FOUND", nil)
+		return
+	}
+
+	if !isOwnerOrAdmin(c, order.UserID) {
+		utils.ErrorResponse(c, http.StatusForbidden, "غير مصرح بإلغاء هذا الطلب", "FORBIDDEN", nil)
 		return
 	}
 
@@ -215,4 +237,32 @@ func (h *OrderHandler) AdminUpdateOrderStatus(c *gin.Context) {
 
 func parseOrderID(c *gin.Context) (uuid.UUID, error) {
 	return uuid.Parse(c.Param("id"))
+}
+
+func isOwnerOrAdmin(c *gin.Context, ownerID uuid.UUID) bool {
+	if ownerID == uuid.Nil {
+		return false
+	}
+
+	userIDVal, ok := c.Get("user_id")
+	if !ok {
+		return false
+	}
+	userID, ok := userIDVal.(uuid.UUID)
+	if !ok {
+		return false
+	}
+	if userID == ownerID {
+		return true
+	}
+
+	roleVal, ok := c.Get("role")
+	if !ok {
+		return false
+	}
+	role, ok := roleVal.(domain.Role)
+	if !ok {
+		return false
+	}
+	return role == domain.RoleAdmin
 }

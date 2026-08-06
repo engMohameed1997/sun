@@ -260,9 +260,28 @@ func (h *ProductHandler) CreateMerchantProduct(c *gin.Context) {
 
 func (h *ProductHandler) UpdateMerchantProduct(c *gin.Context) {
 	merchantID := h.getMerchantID(c)
+	if merchantID == uuid.Nil {
+		utils.UnauthorizedError(c, "غير مصرح")
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		utils.BadRequestError(c, "معرف المنتج غير صالح", err)
+		return
+	}
+
+	existing, err := h.productRepo.FindByID(c.Request.Context(), id)
+	if err != nil {
+		utils.InternalServerError(c, err)
+		return
+	}
+	if existing == nil {
+		utils.ErrorResponse(c, http.StatusNotFound, "المنتج غير موجود", "PRODUCT_NOT_FOUND", nil)
+		return
+	}
+	if existing.MerchantID == nil || *existing.MerchantID != merchantID {
+		utils.ErrorResponse(c, http.StatusForbidden, "غير مصرح بتعديل هذا المنتج", "FORBIDDEN", nil)
 		return
 	}
 
@@ -298,7 +317,7 @@ func (h *ProductHandler) UpdateMerchantProduct(c *gin.Context) {
 		StockQuantity:     req.StockQuantity,
 		LowStockThreshold: req.LowStockThreshold,
 		Images:            req.Images,
-		IsAvailable:       true,
+		IsAvailable:       existing.IsAvailable,
 		UpdatedAt:         time.Now(),
 	}
 
@@ -314,9 +333,28 @@ func (h *ProductHandler) UpdateMerchantProduct(c *gin.Context) {
 
 func (h *ProductHandler) DeleteMerchantProduct(c *gin.Context) {
 	merchantID := h.getMerchantID(c)
+	if merchantID == uuid.Nil {
+		utils.UnauthorizedError(c, "غير مصرح")
+		return
+	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		utils.BadRequestError(c, "معرف المنتج غير صالح", err)
+		return
+	}
+
+	existing, err := h.productRepo.FindByID(c.Request.Context(), id)
+	if err != nil {
+		utils.InternalServerError(c, err)
+		return
+	}
+	if existing == nil {
+		utils.ErrorResponse(c, http.StatusNotFound, "المنتج غير موجود", "PRODUCT_NOT_FOUND", nil)
+		return
+	}
+	if existing.MerchantID == nil || *existing.MerchantID != merchantID {
+		utils.ErrorResponse(c, http.StatusForbidden, "غير مصرح بحذف هذا المنتج", "FORBIDDEN", nil)
 		return
 	}
 

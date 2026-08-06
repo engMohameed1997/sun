@@ -78,28 +78,28 @@ func OptionalAuthMiddleware(authService *service.AuthService) gin.HandlerFunc {
 	}
 }
 
-// WSAuthMiddleware authenticates WebSocket connections using a JWT token from query param.
-// WebSocket clients cannot set HTTP headers after the initial handshake, so we read the
-// token from ?token=JWT query parameter instead.
+// WSAuthMiddleware authenticates WebSocket connections using the Authorization header.
+// Tokens MUST NOT be passed in the URL query string because URLs are logged by servers,
+// proxies, browsers, and can be leaked via Referer headers. The WebSocket handshake is an
+// HTTP request, so clients that can set headers (e.g., wscat, mobile apps, server clients)
+// should send Authorization: Bearer <JWT>.
 func WSAuthMiddleware(authService *service.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tokenStr := c.Query("token")
-		if tokenStr == "" {
-			// Fallback: also accept Authorization header (for testing via wscat etc.)
-			authHeader := c.GetHeader("Authorization")
-			if authHeader != "" {
-				parts := strings.Split(authHeader, " ")
-				if len(parts) == 2 && parts[0] == "Bearer" {
-					tokenStr = parts[1]
-				}
-			}
-		}
-
-		if tokenStr == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "token query parameter is required for WebSocket"})
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is required for WebSocket"})
 			c.Abort()
 			return
 		}
+
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header format"})
+			c.Abort()
+			return
+		}
+
+		tokenStr := parts[1]
 
 		claims, user, err := authService.ValidateTokenWithContext(c.Request.Context(), tokenStr)
 		if err != nil {

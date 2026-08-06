@@ -72,7 +72,7 @@ func main() {
 	adminService := service.NewAdminService(adminRepo, governorateRepo, notificationRepo)
 	ticketService := service.NewSupportTicketService(ticketRepo)
 	bannerService := service.NewBannerService(bannerRepo, redisCache, cfg.RedisBannerCacheTTL)
-	workforceService := service.NewWorkforceService(workforceRepo, userRepo)
+	workforceService := service.NewWorkforceService(workforceRepo, userRepo, realtimeHub)
 	dispatchService := service.NewDispatchService(workforceRepo, workforceService, realtimeHub, notificationService)
 	dispatchService.StartDispatchExpiryCron(context.Background(), time.Minute)
 
@@ -259,6 +259,7 @@ func main() {
 				serviceOrders.POST("/from-calculator", workforceHandler.CreateServiceOrderFromCalculator)
 				serviceOrders.GET("", workforceHandler.ListMyServiceOrders)
 				serviceOrders.GET("/:id", workforceHandler.GetMyServiceOrder)
+				serviceOrders.POST("/:id/cancel", workforceHandler.CancelServiceOrder)
 				serviceOrders.POST("/:id/review", workforceHandler.SubmitOrderReview)
 			}
 

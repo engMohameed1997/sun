@@ -182,6 +182,11 @@ export interface OrderFull {
 }
 
 export type WSMessageType =
+  | 'order'
+  | 'dispatch'
+  | 'workforce'
+  | 'notification'
+  | 'system'
   | 'order.new'
   | 'order.status_changed'
   | 'order.cancelled'
@@ -190,8 +195,16 @@ export type WSMessageType =
 
 export interface WSMessage {
   type: WSMessageType;
+  event?: string;
   payload: any;
   timestamp: string;
+}
+
+export interface TechnicianAvailabilityPayload {
+  technician_id: string;
+  full_name: string;
+  availability_status: 'available' | 'busy' | 'offline' | 'vacation';
+  updated_at: string;
 }
 
 export interface OrderStatusChangedPayload {

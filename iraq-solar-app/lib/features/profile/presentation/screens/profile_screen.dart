@@ -5,9 +5,11 @@ import '../../../../core/services/auth_guard.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../auth/presentation/screens/login_screen.dart';
+import '../../../home/presentation/screens/main_navigation_screen.dart';
 import 'edit_profile_screen.dart';
 import 'saved_calculations_screen.dart';
 import 'my_orders_history_screen.dart';
+import '../../../workforce/customer/service_orders_list_screen.dart';
 import 'favorite_stores_screen.dart';
 import 'security_settings_screen.dart';
 import 'support_help_screen.dart';
@@ -119,6 +121,11 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
                 if (!mounted) return;
                 Navigator.pop(ctx);
                 AppNotification.showInfo(context, 'تم تسجيل الخروج بنجاح ');
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
+                  (route) => false,
+                );
               },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
               child: const Text('تسجيل الخروج', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -262,11 +269,22 @@ class _SolarProfileScreenState extends State<SolarProfileScreen> {
                 },
               ),
               _buildMenuItem(
-                Icons.shopping_bag_outlined,
-                'سجل الطلبات والمنظومات',
-                'متابعة حالة التوصيل والتشغيل الميداني',
+                Icons.handyman_outlined,
+                'طلبات الخدمات والفنيين',
+                'متابعة حالة التركيب، الصيانة، وتعيين الفنيين',
                 () async {
-                  final isAuth = await AuthGuard.requireAuth(context, reasonMessage: 'يرجى تسجيل الدخول لمتابعة سجل الطلبات وحالة التوصيل والمنظومات.');
+                  final isAuth = await AuthGuard.requireAuth(context, reasonMessage: 'يرجى تسجيل الدخول لمتابعة طلبات الخدمات والفنيين.');
+                  if (isAuth && mounted) {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ServiceOrdersListScreen())).then((_) => _loadProfile());
+                  }
+                },
+              ),
+              _buildMenuItem(
+                Icons.shopping_bag_outlined,
+                'طلبات المنتجات والمشتريات',
+                'متابعة حالة الشحن والتوصيل للألواح والمعدات',
+                () async {
+                  final isAuth = await AuthGuard.requireAuth(context, reasonMessage: 'يرجى تسجيل الدخول لمتابعة طلبات الشراء والتوصيل.');
                   if (isAuth && mounted) {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const MyOrdersHistoryScreen())).then((_) => _loadProfile());
                   }

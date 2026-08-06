@@ -30,10 +30,11 @@ const (
 type WSMessageType string
 
 const (
-	MsgOrder    WSMessageType = "order"
-	MsgNotif    WSMessageType = "notification"
-	MsgSystem   WSMessageType = "system"
-	MsgDispatch WSMessageType = "dispatch"
+	MsgOrder     WSMessageType = "order"
+	MsgNotif     WSMessageType = "notification"
+	MsgSystem    WSMessageType = "system"
+	MsgDispatch  WSMessageType = "dispatch"
+	MsgWorkforce WSMessageType = "workforce"
 )
 
 // Event constants — specific events within each message type.
@@ -43,11 +44,13 @@ const (
 	EventOrderCancelled      = "order.cancelled"
 	EventNotificationCreated = "notification.created"
 
-	// Workforce dispatch events
-	EventNewDispatch               = "new_dispatch"
-	EventDispatchCancelled         = "dispatch.cancelled"
-	EventServiceOrderStatusChanged = "service_order.status_changed"
-	EventServiceOrderUnassigned    = "service_order.no_technician"
+	// Workforce dispatch & technician events
+	EventNewDispatch                 = "new_dispatch"
+	EventDispatchCancelled           = "dispatch.cancelled"
+	EventServiceOrderCreated         = "service_order.created"
+	EventServiceOrderStatusChanged   = "service_order.status_changed"
+	EventServiceOrderUnassigned      = "service_order.no_technician"
+	EventTechnicianAvailabilityChanged = "technician.availability_changed"
 )
 
 // WSMessage is the envelope sent over WebSocket.

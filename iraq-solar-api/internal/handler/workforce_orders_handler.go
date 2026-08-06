@@ -43,7 +43,7 @@ func (h *WorkforceHandler) CreateServiceOrder(c *gin.Context) {
 
 	order, err := h.dispatch.CreateServiceOrder(c.Request.Context(), &userID, req, nil)
 	if err != nil {
-		utils.InternalServerError(c, err)
+		utils.BadRequestError(c, err.Error(), err)
 		return
 	}
 
@@ -70,7 +70,7 @@ func (h *WorkforceHandler) CreateServiceOrderFromCalculator(c *gin.Context) {
 
 	order, err := h.dispatch.CreateServiceOrder(c.Request.Context(), &userID, req.CreateServiceOrderRequest, req.CalculatorResult)
 	if err != nil {
-		utils.InternalServerError(c, err)
+		utils.BadRequestError(c, err.Error(), err)
 		return
 	}
 
@@ -80,6 +80,28 @@ func (h *WorkforceHandler) CreateServiceOrderFromCalculator(c *gin.Context) {
 		return
 	}
 	utils.SuccessResponse(c, http.StatusCreated, "تم إنشاء طلب الخدمة من نتيجة الحاسبة", view)
+}
+
+// CancelServiceOrder allows a customer to cancel their own service order.
+func (h *WorkforceHandler) CancelServiceOrder(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		utils.UnauthorizedError(c, "غير مصرح")
+		return
+	}
+	idParam := c.Param("id")
+	orderID, err := uuid.Parse(idParam)
+	if err != nil {
+		utils.BadRequestError(c, "معرف الطلب غير صالح", err)
+		return
+	}
+
+	if err := h.dispatch.CancelServiceOrder(c.Request.Context(), orderID, userID, "إلغاء من الزبون"); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, err.Error(), "CANCEL_FAILED", err)
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "تم إلغاء طلب الخدمة بنجاح", nil)
 }
 
 // ListMyServiceOrders returns the customer's own service order history.
@@ -368,12 +390,42 @@ func (h *WorkforceHandler) UpdateJobStatus(c *gin.Context) {
 		utils.InternalServerError(c, err)
 		return
 	}
+	if updated != nil {
+		h.dispatch.NotifyOrderStatusChanged(ctx, updated, req.Status, req.Notes)
+	}
 	utils.SuccessResponse(c, http.StatusOK, "تم تحديث حالة المهمة", updated)
+}
+
+// requireTechnicianOwnsOrder loads the service order and verifies that it is
+// currently assigned to the authenticated technician. It returns the order.
+func (h *WorkforceHandler) requireTechnicianOwnsOrder(c *gin.Context, tech *domain.Technician, orderID uuid.UUID) (*domain.ServiceOrder, bool) {
+	order, err := h.repo.GetServiceOrder(c.Request.Context(), orderID)
+	if err != nil {
+		utils.InternalServerError(c, err)
+		return nil, false
+	}
+	if order == nil {
+		notFoundError(c, "الطلب غير موجود")
+		return nil, false
+	}
+	if order.AssignedTechnicianID == nil || *order.AssignedTechnicianID != tech.ID {
+		utils.ForbiddenError(c, "هذه المهمة ليست مسندة لك")
+		return nil, false
+	}
+	return order, true
 }
 
 // ToggleJobTask flips a checklist item.
 func (h *WorkforceHandler) ToggleJobTask(c *gin.Context) {
-	if _, ok := h.currentTechnician(c); !ok {
+	tech, ok := h.currentTechnician(c)
+	if !ok {
+		return
+	}
+	orderID, ok := parseUUIDParam(c, "id")
+	if !ok {
+		return
+	}
+	if _, ok := h.requireTechnicianOwnsOrder(c, tech, orderID); !ok {
 		return
 	}
 	taskID, ok := parseUUIDParam(c, "task_id")
@@ -395,6 +447,9 @@ func (h *WorkforceHandler) AddJobMedia(c *gin.Context) {
 	}
 	orderID, ok := parseUUIDParam(c, "id")
 	if !ok {
+		return
+	}
+	if _, ok := h.requireTechnicianOwnsOrder(c, tech, orderID); !ok {
 		return
 	}
 	var req domain.AddJobMediaRequest
@@ -430,6 +485,9 @@ func (h *WorkforceHandler) MarkCustomerUnavailable(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if _, ok := h.requireTechnicianOwnsOrder(c, tech, orderID); !ok {
+		return
+	}
 	var req domain.AddJobMediaRequest
 	_ = c.ShouldBindJSON(&req)
 
@@ -448,6 +506,9 @@ func (h *WorkforceHandler) UpdateTracking(c *gin.Context) {
 	}
 	orderID, ok := parseUUIDParam(c, "id")
 	if !ok {
+		return
+	}
+	if _, ok := h.requireTechnicianOwnsOrder(c, tech, orderID); !ok {
 		return
 	}
 	var req domain.UpdateTrackingRequest
@@ -646,7 +707,7 @@ func (h *WorkforceHandler) AdminAssignTechnician(c *gin.Context) {
 		case errors.Is(err, service.ErrTechnicianNotFound):
 			notFoundError(c, "الفني غير موجود")
 		default:
-			utils.InternalServerError(c, err)
+			utils.BadRequestError(c, err.Error(), err)
 		}
 		return
 	}
@@ -660,7 +721,12 @@ func (h *WorkforceHandler) AdminRedispatchOrder(c *gin.Context) {
 		return
 	}
 	if err := h.dispatch.RedispatchOrder(c.Request.Context(), id); err != nil {
-		utils.InternalServerError(c, err)
+		switch {
+		case errors.Is(err, service.ErrServiceOrderNotFound):
+			notFoundError(c, "الطلب غير موجود")
+		default:
+			utils.BadRequestError(c, err.Error(), err)
+		}
 		return
 	}
 	order, err := h.repo.GetServiceOrder(c.Request.Context(), id)
@@ -691,11 +757,11 @@ func (h *WorkforceHandler) AdminUpdateServiceOrderStatus(c *gin.Context) {
 	ctx := c.Request.Context()
 	if req.Status == domain.SvcStatusCompleted {
 		if err := h.workforce.CompleteOrder(ctx, id, &adminID); err != nil {
-			utils.InternalServerError(c, err)
+			utils.BadRequestError(c, err.Error(), err)
 			return
 		}
 	} else if err := h.repo.UpdateOrderStatus(ctx, id, req.Status, &adminID, req.Notes); err != nil {
-		utils.InternalServerError(c, err)
+		utils.BadRequestError(c, err.Error(), err)
 		return
 	}
 
@@ -703,6 +769,9 @@ func (h *WorkforceHandler) AdminUpdateServiceOrderStatus(c *gin.Context) {
 	if err != nil {
 		utils.InternalServerError(c, err)
 		return
+	}
+	if order != nil {
+		h.dispatch.NotifyOrderStatusChanged(ctx, order, req.Status, req.Notes)
 	}
 	utils.SuccessResponse(c, http.StatusOK, "تم تحديث حالة الطلب", order)
 }

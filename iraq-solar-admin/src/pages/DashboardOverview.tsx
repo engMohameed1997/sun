@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   TrendingUp,
   ShoppingCart,
@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { api } from '../services/api';
+import { useOrdersWebSocket } from '../hooks/useOrdersWebSocket';
 import type { DashboardStats, Product, RevenueDataPoint } from '../types';
 
 export const DashboardOverview: React.FC = () => {
@@ -18,48 +19,57 @@ export const DashboardOverview: React.FC = () => {
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [statsRes, revRes, lowStockRes] = await Promise.all([
-          api.get('/admin/stats').catch(() => null),
-          api.get('/admin/stats/revenue?days=7').catch(() => null),
-          api.get('/admin/products/low-stock').catch(() => null),
-        ]);
+  const fetchData = useCallback(async () => {
+    try {
+      const [statsRes, revRes, lowStockRes] = await Promise.all([
+        api.get('/admin/stats').catch(() => null),
+        api.get('/admin/stats/revenue?days=7').catch(() => null),
+        api.get('/admin/products/low-stock').catch(() => null),
+      ]);
 
-        if (statsRes?.data?.data) {
-          setStats(statsRes.data.data);
-        } else {
-          setStats({
-            total_orders: 0,
-            total_revenue_iqd: 0,
-            total_users: 1,
-            total_products: 0,
-            pending_orders: 0,
-            new_users_this_month: 0,
-            total_stores: 0,
-            active_installers: 0,
-          });
-        }
-
-        if (revRes?.data?.data) {
-          setRevenueData(revRes.data.data);
-        } else {
-          setRevenueData([]);
-        }
-
-        if (lowStockRes?.data?.data) {
-          setLowStockProducts(lowStockRes.data.data);
-        }
-      } catch (err) {
-        console.error('Failed to load dashboard stats', err);
-      } finally {
-        setLoading(false);
+      if (statsRes?.data?.data) {
+        setStats(statsRes.data.data);
+      } else {
+        setStats({
+          total_orders: 0,
+          total_revenue_iqd: 0,
+          total_users: 1,
+          total_products: 0,
+          pending_orders: 0,
+          new_users_this_month: 0,
+          total_stores: 0,
+          active_installers: 0,
+        });
       }
-    };
 
-    fetchData();
+      if (revRes?.data?.data) {
+        setRevenueData(revRes.data.data);
+      } else {
+        setRevenueData([]);
+      }
+
+      if (lowStockRes?.data?.data) {
+        setLowStockProducts(lowStockRes.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to load dashboard stats', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useOrdersWebSocket({
+    onNewOrder: fetchData,
+    onStatusChanged: fetchData,
+    onOrderCancelled: fetchData,
+    onServiceOrderCreated: fetchData,
+    onServiceOrderStatusChanged: fetchData,
+    onTechnicianAvailabilityChanged: fetchData,
+  });
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   if (loading) {
     return (

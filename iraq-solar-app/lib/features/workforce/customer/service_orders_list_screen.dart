@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/network/api_client.dart';
+import '../../../core/services/websocket_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../shared/workforce_constants.dart';
 import 'create_service_order_screen.dart';
@@ -17,11 +19,25 @@ class ServiceOrdersListScreen extends StatefulWidget {
 class _ServiceOrdersListScreenState extends State<ServiceOrdersListScreen> {
   List<Map<String, dynamic>> _orders = [];
   bool _isLoading = true;
+  StreamSubscription<WSMessage>? _wsSub;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _wsSub = WebSocketService.instance.messageStream.listen((msg) {
+      if (msg.type == 'dispatch' ||
+          msg.type == 'notification' ||
+          msg.event.startsWith('service_order')) {
+        _load();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _wsSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -29,9 +45,7 @@ class _ServiceOrdersListScreenState extends State<ServiceOrdersListScreen> {
     final res = await ApiClient.getMyServiceOrders();
     if (!mounted) return;
     setState(() {
-      _orders = res['success'] == true
-          ? List<Map<String, dynamic>>.from(res['data'] ?? [])
-          : <Map<String, dynamic>>[];
+      _orders = ApiClient.extractServiceOrders(res);
       _isLoading = false;
     });
   }

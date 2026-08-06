@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/iraq-solar/api/internal/domain"
+	"github.com/iraq-solar/api/internal/hub"
 	"github.com/iraq-solar/api/internal/repository"
 )
 
@@ -30,11 +31,12 @@ var (
 type WorkforceService struct {
 	repo     repository.WorkforceRepository
 	userRepo repository.UserRepository
+	hub      *hub.RealtimeHub
 }
 
 // NewWorkforceService builds a WorkforceService.
-func NewWorkforceService(repo repository.WorkforceRepository, userRepo repository.UserRepository) *WorkforceService {
-	return &WorkforceService{repo: repo, userRepo: userRepo}
+func NewWorkforceService(repo repository.WorkforceRepository, userRepo repository.UserRepository, realtimeHub *hub.RealtimeHub) *WorkforceService {
+	return &WorkforceService{repo: repo, userRepo: userRepo, hub: realtimeHub}
 }
 
 // Repo exposes the underlying repository for handlers that only need reads.
@@ -162,7 +164,23 @@ func (s *WorkforceService) UpdateAvailability(ctx context.Context, technicianID 
 	default:
 		return errors.New("invalid availability status")
 	}
-	return s.repo.UpsertAvailability(ctx, technicianID, req)
+	if err := s.repo.UpsertAvailability(ctx, technicianID, req); err != nil {
+		return err
+	}
+	tech, _ := s.repo.GetTechnicianByID(ctx, technicianID)
+	fullName := ""
+	if tech != nil {
+		fullName = tech.FullName
+	}
+	if s.hub != nil {
+		go s.hub.BroadcastToAdmins(hub.MsgWorkforce, hub.EventTechnicianAvailabilityChanged, map[string]any{
+			"technician_id":       technicianID,
+			"full_name":           fullName,
+			"availability_status": req.Status,
+			"updated_at":          time.Now(),
+		})
+	}
+	return nil
 }
 
 // GetTechnicianForUser resolves the technician profile bound to an authenticated user.
@@ -573,18 +591,19 @@ func (s *WorkforceService) GetWalletSummary(ctx context.Context, technicianID uu
 // BuildCustomerView converts an order into the privacy-safe customer projection.
 func (s *WorkforceService) BuildCustomerView(ctx context.Context, order *domain.ServiceOrder) (*domain.CustomerServiceOrderView, error) {
 	view := &domain.CustomerServiceOrderView{
-		ID:              order.ID,
-		OrderNumber:     order.OrderNumber,
-		OrderType:       order.OrderType,
-		Description:     order.Description,
-		SystemSizeKW:    order.SystemSizeKW,
-		Address:         order.Address,
-		GovernorateName: order.GovernorateName,
-		PreferredDate:   order.PreferredDate,
-		Status:          order.Status,
-		StatusLabelAr:   domain.ServiceOrderStatusLabels[order.Status],
-		CreatedAt:       order.CreatedAt,
-		CompletedAt:     order.CompletedAt,
+		ID:                   order.ID,
+		OrderNumber:          order.OrderNumber,
+		OrderType:            order.OrderType,
+		Description:          order.Description,
+		SystemSizeKW:         order.SystemSizeKW,
+		Address:              order.Address,
+		GovernorateName:      order.GovernorateName,
+		PreferredDate:        order.PreferredDate,
+		Status:               order.Status,
+		StatusLabelAr:        domain.ServiceOrderStatusLabels[order.Status],
+		AssignedTechnicianID: order.AssignedTechnicianID,
+		CreatedAt:            order.CreatedAt,
+		CompletedAt:          order.CompletedAt,
 	}
 
 	timeline, err := s.repo.GetStatusHistory(ctx, order.ID)
@@ -600,6 +619,7 @@ func (s *WorkforceService) BuildCustomerView(ctx context.Context, order *domain.
 		}
 		if tech != nil {
 			view.Technician = &domain.AssignedTechnicianSummary{
+				ID:                 tech.ID,
 				FirstName:          firstName(tech.FullName),
 				ProfileImageURL:    tech.ProfileImageURL,
 				Rating:             tech.Rating,

@@ -93,9 +93,18 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
       return;
     }
 
+    final sizeText = _sizeController.text.trim();
+    double? size;
+    if (sizeText.isNotEmpty) {
+      size = double.tryParse(sizeText);
+      if (size == null) {
+        _showMessage('حجم المنظومة يجب أن يكون رقماً صالحة (مثال: 5.5)', success: false);
+        return;
+      }
+    }
+
     setState(() => _isSubmitting = true);
 
-    final size = double.tryParse(_sizeController.text.trim());
     final res = widget.calculatorResult != null
         ? await ApiClient.createServiceOrderFromCalculator(
             orderType: _orderType,
@@ -105,6 +114,7 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
             description: _descriptionController.text.trim(),
             systemSizeKw: size,
             address: _addressController.text.trim(),
+            preferredDate: _preferredDate,
           )
         : await ApiClient.createServiceOrder(
             orderType: _orderType,
@@ -131,7 +141,8 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
         Navigator.pop(context, true);
       }
     } else {
-      _showMessage(res['message']?.toString() ?? 'تعذر إرسال الطلب', success: false);
+      final msg = res['message']?.toString();
+      _showMessage((msg != null && msg.trim().isNotEmpty) ? msg : 'تعذر إرسال الطلب، يرجى المحاولة لاحقاً', success: false);
     }
   }
 
@@ -216,9 +227,24 @@ class _CreateServiceOrderScreenState extends State<CreateServiceOrderScreen> {
                       onTap: () async {
                         final picked = await showDatePicker(
                           context: context,
-                          initialDate: DateTime.now().add(const Duration(days: 1)),
+                          initialDate: _preferredDate ?? DateTime.now().add(const Duration(days: 1)),
                           firstDate: DateTime.now(),
                           lastDate: DateTime.now().add(const Duration(days: 90)),
+                          builder: (context, child) {
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                colorScheme: const ColorScheme.light(
+                                  primary: AppTheme.primaryGold,
+                                  onPrimary: Colors.white,
+                                  onSurface: AppTheme.darkNavy,
+                                ),
+                              ),
+                              child: Directionality(
+                                textDirection: TextDirection.rtl,
+                                child: child!,
+                              ),
+                            );
+                          },
                         );
                         if (picked != null) setState(() => _preferredDate = picked);
                       },

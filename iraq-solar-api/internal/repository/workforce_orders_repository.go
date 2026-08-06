@@ -15,7 +15,7 @@ import (
 const serviceOrderSelectColumns = `
 	o.id, o.order_number, o.customer_id, o.order_type, o.description, o.system_size_kw,
 	o.governorate_id, o.district_id, o.address, o.lat, o.lng, o.preferred_date, o.status,
-	o.priority, o.calculator_result, o.assigned_technician_id, o.dispatch_mode,
+	o.priority, COALESCE(o.calculator_result, '{}'::jsonb) AS calculator_result, o.assigned_technician_id, o.dispatch_mode,
 	o.created_at, o.updated_at, o.completed_at,
 	u.full_name AS customer_name, u.phone AS customer_phone,
 	g.name_ar AS governorate_name, d.name_ar AS district_name,
@@ -47,16 +47,29 @@ func (r *postgresWorkforceRepository) CreateServiceOrder(ctx context.Context, o 
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	if o.CustomerID != nil && *o.CustomerID != uuid.Nil {
+		var exists bool
+		_ = tx.GetContext(ctx, &exists, `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`, *o.CustomerID)
+		if !exists {
+			o.CustomerID = nil
+		}
+	}
+
+	var calcRes interface{}
+	if len(o.CalculatorResult) > 0 && string(o.CalculatorResult) != "null" {
+		calcRes = string(o.CalculatorResult)
+	}
+
 	query := `
 		INSERT INTO service_orders (
 			id, order_number, customer_id, order_type, description, system_size_kw,
 			governorate_id, district_id, address, lat, lng, preferred_date,
 			status, priority, calculator_result, dispatch_mode
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,$16)`
 	if _, err := tx.ExecContext(ctx, query,
 		o.ID, o.OrderNumber, o.CustomerID, o.OrderType, o.Description, o.SystemSizeKW,
 		o.GovernorateID, o.DistrictID, o.Address, o.Lat, o.Lng, o.PreferredDate,
-		o.Status, o.Priority, o.CalculatorResult, o.DispatchMode); err != nil {
+		o.Status, o.Priority, calcRes, o.DispatchMode); err != nil {
 		return fmt.Errorf("insert service order: %w", err)
 	}
 
@@ -157,17 +170,22 @@ func (r *postgresWorkforceRepository) UpdateOrderStatus(ctx context.Context, ord
 
 	query := `
 		UPDATE service_orders SET
-			status = $1,
-			completed_at = CASE WHEN $1 = 'completed' THEN NOW() ELSE completed_at END,
+			status = $1::text,
+			completed_at = CASE WHEN $1::text = 'completed' THEN NOW() ELSE completed_at END,
 			updated_at = NOW()
 		WHERE id = $2`
 	if _, err := tx.ExecContext(ctx, query, status, orderID); err != nil {
 		return fmt.Errorf("update order status: %w", err)
 	}
 
+	var validChangedBy *uuid.UUID
+	if changedBy != nil && *changedBy != uuid.Nil {
+		validChangedBy = changedBy
+	}
+
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO service_order_status_history (order_id, status, changed_by, notes) VALUES ($1, $2, $3, $4)`,
-		orderID, status, changedBy, notes); err != nil {
+		orderID, status, validChangedBy, notes); err != nil {
 		return fmt.Errorf("insert status history: %w", err)
 	}
 
@@ -175,7 +193,7 @@ func (r *postgresWorkforceRepository) UpdateOrderStatus(ctx context.Context, ord
 }
 
 func (r *postgresWorkforceRepository) SetOrderTechnician(ctx context.Context, orderID, technicianID uuid.UUID, status domain.ServiceOrderStatus) error {
-	query := `UPDATE service_orders SET assigned_technician_id = $1, status = $2, updated_at = NOW() WHERE id = $3`
+	query := `UPDATE service_orders SET assigned_technician_id = NULLIF($1, '00000000-0000-0000-0000-000000000000'::uuid), status = $2, updated_at = NOW() WHERE id = $3`
 	if _, err := r.db.ExecContext(ctx, query, technicianID, status, orderID); err != nil {
 		return fmt.Errorf("set order technician: %w", err)
 	}
@@ -290,7 +308,17 @@ func (r *postgresWorkforceRepository) AddToDispatchQueue(ctx context.Context, en
 	query := `
 		INSERT INTO dispatch_queue (id, service_order_id, technician_id, priority_score, dispatch_mode, position, status, selection_reason)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (service_order_id, technician_id) DO NOTHING`
+		ON CONFLICT (service_order_id, technician_id) DO UPDATE SET
+			id = EXCLUDED.id,
+			priority_score = EXCLUDED.priority_score,
+			dispatch_mode = EXCLUDED.dispatch_mode,
+			position = EXCLUDED.position,
+			status = EXCLUDED.status,
+			selection_reason = EXCLUDED.selection_reason,
+			sent_at = NULL,
+			responded_at = NULL,
+			expires_at = NULL,
+			created_at = NOW()`
 	for _, e := range entries {
 		if _, err := tx.ExecContext(ctx, query,
 			e.ID, e.ServiceOrderID, e.TechnicianID, e.PriorityScore, e.DispatchMode, e.Position, e.Status, e.SelectionReason); err != nil {
@@ -304,7 +332,7 @@ func (r *postgresWorkforceRepository) GetDispatchQueue(ctx context.Context, orde
 	list := []domain.DispatchQueueEntry{}
 	query := `
 		SELECT q.id, q.service_order_id, q.technician_id, q.priority_score, q.dispatch_mode,
-		       q.position, q.status, q.selection_reason, q.sent_at, q.responded_at, q.expires_at, q.created_at,
+		       q.position, q.status, COALESCE(q.selection_reason, '{}'::jsonb) AS selection_reason, q.sent_at, q.responded_at, q.expires_at, q.created_at,
 		       t.full_name AS technician_name
 		FROM dispatch_queue q
 		LEFT JOIN technicians t ON t.id = q.technician_id
@@ -320,7 +348,7 @@ func (r *postgresWorkforceRepository) GetDispatchEntry(ctx context.Context, disp
 	var e domain.DispatchQueueEntry
 	query := `
 		SELECT q.id, q.service_order_id, q.technician_id, q.priority_score, q.dispatch_mode,
-		       q.position, q.status, q.selection_reason, q.sent_at, q.responded_at, q.expires_at, q.created_at,
+		       q.position, q.status, COALESCE(q.selection_reason, '{}'::jsonb) AS selection_reason, q.sent_at, q.responded_at, q.expires_at, q.created_at,
 		       t.full_name AS technician_name
 		FROM dispatch_queue q
 		LEFT JOIN technicians t ON t.id = q.technician_id
@@ -363,11 +391,19 @@ func (r *postgresWorkforceRepository) CancelRemainingDispatch(ctx context.Contex
 	return nil
 }
 
+func (r *postgresWorkforceRepository) ClearDispatchQueue(ctx context.Context, orderID uuid.UUID) error {
+	query := `DELETE FROM dispatch_queue WHERE service_order_id = $1`
+	if _, err := r.db.ExecContext(ctx, query, orderID); err != nil {
+		return fmt.Errorf("clear dispatch queue: %w", err)
+	}
+	return nil
+}
+
 func (r *postgresWorkforceRepository) GetNextDispatchCandidate(ctx context.Context, orderID uuid.UUID) (*domain.DispatchQueueEntry, error) {
 	var e domain.DispatchQueueEntry
 	query := `
 		SELECT q.id, q.service_order_id, q.technician_id, q.priority_score, q.dispatch_mode,
-		       q.position, q.status, q.selection_reason, q.sent_at, q.responded_at, q.expires_at, q.created_at,
+		       q.position, q.status, COALESCE(q.selection_reason, '{}'::jsonb) AS selection_reason, q.sent_at, q.responded_at, q.expires_at, q.created_at,
 		       t.full_name AS technician_name
 		FROM dispatch_queue q
 		LEFT JOIN technicians t ON t.id = q.technician_id
@@ -388,7 +424,7 @@ func (r *postgresWorkforceRepository) ListTechnicianOffers(ctx context.Context, 
 	query := `
 		SELECT q.id AS dispatch_id, o.id AS order_id, o.order_number, o.order_type, o.system_size_kw,
 		       g.name_ar AS governorate_name, d.name_ar AS district_name, o.priority, o.preferred_date,
-		       q.expires_at, q.selection_reason, q.status, q.created_at
+		       q.expires_at, COALESCE(q.selection_reason, '{}'::jsonb) AS selection_reason, q.status, q.created_at
 		FROM dispatch_queue q
 		JOIN service_orders o ON o.id = q.service_order_id
 		LEFT JOIN governorates g ON g.id = o.governorate_id
@@ -496,10 +532,14 @@ func (r *postgresWorkforceRepository) ListDispatchStats(ctx context.Context) ([]
 // --- Assignments ---
 
 func (r *postgresWorkforceRepository) CreateAssignment(ctx context.Context, a *domain.OrderAssignment) error {
+	var validAdmin *uuid.UUID
+	if a.AssignedByAdmin != nil && *a.AssignedByAdmin != uuid.Nil {
+		validAdmin = a.AssignedByAdmin
+	}
 	query := `
 		INSERT INTO order_assignments (id, order_id, technician_id, assigned_by, assigned_by_admin, status, accepted_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)`
-	_, err := r.db.ExecContext(ctx, query, a.ID, a.OrderID, a.TechnicianID, a.AssignedBy, a.AssignedByAdmin, a.Status, a.AcceptedAt)
+	_, err := r.db.ExecContext(ctx, query, a.ID, a.OrderID, a.TechnicianID, a.AssignedBy, validAdmin, a.Status, a.AcceptedAt)
 	if err != nil {
 		return fmt.Errorf("create assignment: %w", err)
 	}
@@ -542,9 +582,9 @@ func (r *postgresWorkforceRepository) ListTechnicianAssignments(ctx context.Cont
 func (r *postgresWorkforceRepository) UpdateAssignmentStatus(ctx context.Context, orderID, technicianID uuid.UUID, status domain.AssignmentStatus) error {
 	query := `
 		UPDATE order_assignments SET
-			status = $1,
-			completion_time = CASE WHEN $1 = 'completed' THEN NOW() ELSE completion_time END,
-			rejected_at = CASE WHEN $1 = 'rejected' THEN NOW() ELSE rejected_at END
+			status = $1::text,
+			completion_time = CASE WHEN $1::text = 'completed' THEN NOW() ELSE completion_time END,
+			rejected_at = CASE WHEN $1::text = 'rejected' THEN NOW() ELSE rejected_at END
 		WHERE order_id = $2 AND technician_id = $3`
 	if _, err := r.db.ExecContext(ctx, query, status, orderID, technicianID); err != nil {
 		return fmt.Errorf("update assignment status: %w", err)
@@ -730,8 +770,8 @@ func (r *postgresWorkforceRepository) ListPricing(ctx context.Context, status st
 func (r *postgresWorkforceRepository) UpdatePaymentStatus(ctx context.Context, orderID uuid.UUID, status domain.ServicePaymentStatus) error {
 	query := `
 		UPDATE service_pricing SET
-			payment_status = $1,
-			settled_at = CASE WHEN $1 = 'settled' THEN NOW() ELSE settled_at END
+			payment_status = $1::text,
+			settled_at = CASE WHEN $1::text = 'settled' THEN NOW() ELSE settled_at END
 		WHERE order_id = $2`
 	if _, err := r.db.ExecContext(ctx, query, status, orderID); err != nil {
 		return fmt.Errorf("update payment status: %w", err)

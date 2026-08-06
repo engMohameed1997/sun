@@ -5,6 +5,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_toast.dart';
 import '../../../cart/presentation/screens/order_details_screen.dart';
 import '../../../auth/presentation/screens/login_screen.dart';
+import '../../../workforce/customer/service_orders_list_screen.dart';
 
 // ─── Order status helpers ────────────────────────────────────────────────────
 
@@ -225,14 +226,57 @@ class _MyOrdersHistoryScreenState extends State<MyOrdersHistoryScreen> with Sing
                 ? _buildAuthRequired()
                 : _hasError
                     ? _buildError()
-                    : TabBarView(
-                        controller: _tabController,
+                    : Column(
                         children: [
-                          _buildList(null),
-                          _buildList('pending'),
-                          _buildList('confirmed'),
-                          _buildList('processing'),
-                          _buildList('completed'),
+                          Container(
+                            margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
+                              border: Border.all(color: AppTheme.primaryGold.withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.handyman_rounded, color: AppTheme.primaryGold, size: 24),
+                                const SizedBox(width: 10),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('طلبات خدمات الفنيين والصيانة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.darkNavy)),
+                                      Text('متابعة حالة التركيب، الصيانة وتعيين المهندسين', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                    ],
+                                  ),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ServiceOrdersListScreen()));
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.darkNavy,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  ),
+                                  child: const Text('عرض طلبات الفنيين', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: TabBarView(
+                              controller: _tabController,
+                              children: [
+                                _buildList(null),
+                                _buildList('pending'),
+                                _buildList('confirmed'),
+                                _buildList('processing'),
+                                _buildList('completed'),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
       ),

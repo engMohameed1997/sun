@@ -67,9 +67,11 @@ class AuthStorageService {
 
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyToken);
-    await prefs.remove(_keyRefreshToken);
-    await prefs.remove(_keyUserData);
-    await clearBannerCache();
+    // Preserve only device_id (non-user-specific), clear everything else
+    final deviceId = prefs.getString('app_device_id');
+    await prefs.clear();
+    if (deviceId != null) {
+      await prefs.setString('app_device_id', deviceId);
+    }
   }
 }

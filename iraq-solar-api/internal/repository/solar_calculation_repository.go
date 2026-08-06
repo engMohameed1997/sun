@@ -28,17 +28,24 @@ func (r *postgresSolarCalculationRepository) Create(ctx context.Context, calc *d
 		return nil
 	}
 
+	var detailsRes interface{}
+	if len(calc.Details) > 0 && string(calc.Details) != "null" {
+		detailsRes = string(calc.Details)
+	}
+
 	query := `
 		INSERT INTO solar_calculations (
 			id, user_id, daily_consumption_kwh, peak_sun_hours, system_size_kw,
 			recommended_inverter_kw, recommended_battery_kwh, panel_count, estimated_cost_usd, details, created_at
 		) VALUES (
-			:id, :user_id, :daily_consumption_kwh, :peak_sun_hours, :system_size_kw,
-			:recommended_inverter_kw, :recommended_battery_kwh, :panel_count, :estimated_cost_usd, :details, :created_at
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11
 		)
 	`
 
-	_, err := r.db.NamedExecContext(ctx, query, calc)
+	_, err := r.db.ExecContext(ctx, query,
+		calc.ID, calc.UserID, calc.DailyConsumptionkWh, calc.PeakSunHours, calc.SystemSizekW,
+		calc.RecommendedInverterkW, calc.RecommendedBatterykWh, calc.PanelCount, calc.EstimatedCostIQD, detailsRes, calc.CreatedAt,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to insert solar calculation: %w", err)
 	}
